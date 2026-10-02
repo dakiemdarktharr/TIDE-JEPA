@@ -1,0 +1,609 @@
+"""Original AI-authored Vi–En controlled examples; not PhoMT or human gold.
+
+Each tuple explicitly specifies the four meaning states (current/past x
+positive/negative). Actions follow these stated meanings, not translation links.
+Reviewers must examine the actual generated records before approving them.
+"""
+
+import argparse
+import json
+from pathlib import Path
+
+from .data import CorpusRecord, dataset_fingerprint
+from .schema import Action
+
+
+# Independently authored event families. The split is fixed before model runs.
+# en: current positive, current negative, past positive, past negative; then vi.
+FAMILIES = {
+    "train": [
+        ("read", "Lan reads a book now.", "Lan does not read a book now.", "Lan read a book yesterday.", "Lan did not read a book yesterday.", "Bây giờ Lan đọc một quyển sách.", "Bây giờ Lan không đọc một quyển sách.", "Hôm qua Lan đọc một quyển sách.", "Hôm qua Lan không đọc một quyển sách."),
+        ("cook", "Nam cooks rice now.", "Nam does not cook rice now.", "Nam cooked rice yesterday.", "Nam did not cook rice yesterday.", "Bây giờ Nam nấu cơm.", "Bây giờ Nam không nấu cơm.", "Hôm qua Nam nấu cơm.", "Hôm qua Nam không nấu cơm."),
+        ("open", "Mai opens the door now.", "Mai does not open the door now.", "Mai opened the door yesterday.", "Mai did not open the door yesterday.", "Bây giờ Mai mở cửa.", "Bây giờ Mai không mở cửa.", "Hôm qua Mai mở cửa.", "Hôm qua Mai không mở cửa."),
+        ("wash", "Minh washes a cup now.", "Minh does not wash a cup now.", "Minh washed a cup yesterday.", "Minh did not wash a cup yesterday.", "Bây giờ Minh rửa một cái cốc.", "Bây giờ Minh không rửa một cái cốc.", "Hôm qua Minh rửa một cái cốc.", "Hôm qua Minh không rửa một cái cốc."),
+        ("draw", "Hoa draws a flower now.", "Hoa does not draw a flower now.", "Hoa drew a flower yesterday.", "Hoa did not draw a flower yesterday.", "Bây giờ Hoa vẽ một bông hoa.", "Bây giờ Hoa không vẽ một bông hoa.", "Hôm qua Hoa vẽ một bông hoa.", "Hôm qua Hoa không vẽ một bông hoa."),
+        ("buy", "An buys bread now.", "An does not buy bread now.", "An bought bread yesterday.", "An did not buy bread yesterday.", "Bây giờ An mua bánh mì.", "Bây giờ An không mua bánh mì.", "Hôm qua An mua bánh mì.", "Hôm qua An không mua bánh mì."),
+        ("drink", "Binh drinks water now.", "Binh does not drink water now.", "Binh drank water yesterday.", "Binh did not drink water yesterday.", "Bây giờ Bình uống nước.", "Bây giờ Bình không uống nước.", "Hôm qua Bình uống nước.", "Hôm qua Bình không uống nước."),
+        ("carry", "Ha carries a bag now.", "Ha does not carry a bag now.", "Ha carried a bag yesterday.", "Ha did not carry a bag yesterday.", "Bây giờ Hà mang một cái túi.", "Bây giờ Hà không mang một cái túi.", "Hôm qua Hà mang một cái túi.", "Hôm qua Hà không mang một cái túi."),
+        ("plant", "Dung plants a tree now.", "Dung does not plant a tree now.", "Dung planted a tree yesterday.", "Dung did not plant a tree yesterday.", "Bây giờ Dũng trồng một cái cây.", "Bây giờ Dũng không trồng một cái cây.", "Hôm qua Dũng trồng một cái cây.", "Hôm qua Dũng không trồng một cái cây."),
+        ("clean", "Linh cleans the table now.", "Linh does not clean the table now.", "Linh cleaned the table yesterday.", "Linh did not clean the table yesterday.", "Bây giờ Linh lau bàn.", "Bây giờ Linh không lau bàn.", "Hôm qua Linh lau bàn.", "Hôm qua Linh không lau bàn."),
+        ("write", "Thu writes a letter now.", "Thu does not write a letter now.", "Thu wrote a letter yesterday.", "Thu did not write a letter yesterday.", "Bây giờ Thu viết một lá thư.", "Bây giờ Thu không viết một lá thư.", "Hôm qua Thu viết một lá thư.", "Hôm qua Thu không viết một lá thư."),
+        ("close", "Son closes the window now.", "Son does not close the window now.", "Son closed the window yesterday.", "Son did not close the window yesterday.", "Bây giờ Sơn đóng cửa sổ.", "Bây giờ Sơn không đóng cửa sổ.", "Hôm qua Sơn đóng cửa sổ.", "Hôm qua Sơn không đóng cửa sổ."),
+    ],
+    "validation": [
+        ("fix", "Tuan fixes a bicycle now.", "Tuan does not fix a bicycle now.", "Tuan fixed a bicycle yesterday.", "Tuan did not fix a bicycle yesterday.", "Bây giờ Tuấn sửa một chiếc xe đạp.", "Bây giờ Tuấn không sửa một chiếc xe đạp.", "Hôm qua Tuấn sửa một chiếc xe đạp.", "Hôm qua Tuấn không sửa một chiếc xe đạp."),
+        ("sell", "Nga sells fruit now.", "Nga does not sell fruit now.", "Nga sold fruit yesterday.", "Nga did not sell fruit yesterday.", "Bây giờ Nga bán trái cây.", "Bây giờ Nga không bán trái cây.", "Hôm qua Nga bán trái cây.", "Hôm qua Nga không bán trái cây."),
+        ("listen", "Phuc listens to music now.", "Phuc does not listen to music now.", "Phuc listened to music yesterday.", "Phuc did not listen to music yesterday.", "Bây giờ Phúc nghe nhạc.", "Bây giờ Phúc không nghe nhạc.", "Hôm qua Phúc nghe nhạc.", "Hôm qua Phúc không nghe nhạc."),
+        ("feed", "Vy feeds a cat now.", "Vy does not feed a cat now.", "Vy fed a cat yesterday.", "Vy did not feed a cat yesterday.", "Bây giờ Vy cho một con mèo ăn.", "Bây giờ Vy không cho một con mèo ăn.", "Hôm qua Vy cho một con mèo ăn.", "Hôm qua Vy không cho một con mèo ăn."),
+    ],
+    "test": [
+        ("paint", "Huy paints a wall now.", "Huy does not paint a wall now.", "Huy painted a wall yesterday.", "Huy did not paint a wall yesterday.", "Bây giờ Huy sơn một bức tường.", "Bây giờ Huy không sơn một bức tường.", "Hôm qua Huy sơn một bức tường.", "Hôm qua Huy không sơn một bức tường."),
+        ("find", "My finds a key now.", "My does not find a key now.", "My found a key yesterday.", "My did not find a key yesterday.", "Bây giờ My tìm thấy một chiếc chìa khóa.", "Bây giờ My không tìm thấy một chiếc chìa khóa.", "Hôm qua My tìm thấy một chiếc chìa khóa.", "Hôm qua My không tìm thấy một chiếc chìa khóa."),
+        ("learn", "Khanh learns a song now.", "Khanh does not learn a song now.", "Khanh learned a song yesterday.", "Khanh did not learn a song yesterday.", "Bây giờ Khánh học một bài hát.", "Bây giờ Khánh không học một bài hát.", "Hôm qua Khánh học một bài hát.", "Hôm qua Khánh không học một bài hát."),
+        ("send", "Quynh sends a message now.", "Quynh does not send a message now.", "Quynh sent a message yesterday.", "Quynh did not send a message yesterday.", "Bây giờ Quỳnh gửi một tin nhắn.", "Bây giờ Quỳnh không gửi một tin nhắn.", "Hôm qua Quỳnh gửi một tin nhắn.", "Hôm qua Quỳnh không gửi một tin nhắn."),
+    ],
+}
+
+# V4 is a new, same-language synthetic corpus with disjoint event families
+# from v3 and two independently rendered surface forms for each meaning state.
+# Tuple fields: event, EN agent/base/present/past/patient, VI agent/verb/patient.
+FAMILIES_V4 = {
+    "train": [
+        ("borrow", "Phuong", "borrow", "borrows", "borrowed", "a pen", "Phương", "mượn", "một cây bút"),
+        ("bake", "Khoa", "bake", "bakes", "baked", "a cake", "Khoa", "nướng", "một chiếc bánh"),
+        ("fold", "Trang", "fold", "folds", "folded", "a shirt", "Trang", "gấp", "một chiếc áo"),
+        ("kick", "Long", "kick", "kicks", "kicked", "a ball", "Long", "đá", "một quả bóng"),
+        ("pour", "Diep", "pour", "pours", "poured", "tea", "Diệp", "rót", "trà"),
+        ("mail", "Nhi", "mail", "mails", "mailed", "a letter", "Nhi", "gửi", "một lá thư"),
+        ("row", "Tuan", "row", "rows", "rowed", "a boat", "Tuấn", "chèo", "một chiếc thuyền"),
+        ("lift", "Vy", "lift", "lifts", "lifted", "a box", "Vy", "nhấc", "một cái hộp"),
+        ("sweep", "Hieu", "sweep", "sweeps", "swept", "the floor", "Hiếu", "quét", "sàn nhà"),
+        ("sew", "My", "sew", "sews", "sewed", "a button", "Mỹ", "khâu", "một chiếc cúc áo"),
+        ("chop", "Quang", "chop", "chops", "chopped", "vegetables", "Quang", "băm", "rau củ"),
+        ("stir", "Lan Anh", "stir", "stirs", "stirred", "the soup", "Lan Anh", "khuấy", "nồi súp"),
+    ],
+    "validation": [
+        ("catch", "Bao", "catch", "catches", "caught", "a fish", "Bảo", "bắt", "một con cá"),
+        ("polish", "Kim", "polish", "polishes", "polished", "the shoes", "Kim", "đánh bóng", "đôi giày"),
+        ("pack", "Son", "pack", "packs", "packed", "a suitcase", "Sơn", "đóng gói", "một chiếc va li"),
+        ("water", "Thao", "water", "waters", "watered", "the flowers", "Thảo", "tưới", "những bông hoa"),
+    ],
+    "test": [
+        ("measure", "Duy", "measure", "measures", "measured", "the table", "Duy", "đo", "chiếc bàn"),
+        ("unlock", "Nga", "unlock", "unlocks", "unlocked", "the gate", "Nga", "mở khóa", "cánh cổng"),
+        ("mix", "Phuc", "mix", "mixes", "mixed", "the batter", "Phúc", "trộn", "bột bánh"),
+        ("count", "Yen", "count", "counts", "counted", "the coins", "Yến", "đếm", "những đồng xu"),
+    ],
+}
+
+
+def author_seed(output_dir):
+    output = Path(output_dir)
+    if output.exists():
+        raise FileExistsError("seed output already exists; do not overwrite a reviewed corpus")
+    rows, edges, paths, groups = [], [], [], {}
+    single_edges = [(0, 2, "TIME", "PAST"), (2, 0, "TIME", "NOW"),
+                    (0, 1, "POLARITY", "NEGATIVE"), (1, 0, "POLARITY", "POSITIVE"),
+                    (2, 3, "POLARITY", "NEGATIVE"), (3, 2, "POLARITY", "POSITIVE"),
+                    (1, 3, "TIME", "PAST"), (3, 1, "TIME", "NOW")]
+    for split, families in FAMILIES.items():
+        for family in families:
+            event, *texts = family
+            group = f"authored-{event}"
+            groups[group] = split
+            path_edges = ([(0, 2, "TIME", "PAST"), (2, 3, "POLARITY", "NEGATIVE")]
+                          if split == "test" else
+                          [(0, 1, "POLARITY", "NEGATIVE"), (1, 3, "TIME", "PAST")])
+            for language, state_texts in (("en", texts[:4]), ("vi", texts[4:])):
+                for index, (source, target, kind, value) in enumerate(single_edges + path_edges):
+                    is_path = index >= len(single_edges)
+                    rows.append(CorpusRecord(
+                        record_id=f"{group}-{language}-{index}", split_group_id=group,
+                        language=language, source_text=state_texts[source], target_text=state_texts[target],
+                        source_frame_id=f"{group}-state-{source}", target_frame_id=f"{group}-state-{target}",
+                        action=Action(kind, value), provenance_ref="tide_jepa/pilot_seed.py:original-ai-authored-v1",
+                        license_ref="original-ai-authored-internal-research; no-PhoMT-content",
+                        approval_status="pending", path_id=f"{group}-path" if is_path else None,
+                        path_step=index - len(single_edges) if is_path else None,
+                    ))
+            for index in range(10):
+                edges.append({"left_record_id": f"{group}-en-{index}", "right_record_id": f"{group}-vi-{index}", "relation": "same_event"})
+            paths.append({"left_path_id": f"{group}-path", "left_language": "en", "right_path_id": f"{group}-path", "right_language": "vi", "relation": "same_event"})
+    actions = [{"kind": kind, "value": value} for kind, value in (("TIME", "NOW"), ("TIME", "PAST"), ("POLARITY", "POSITIVE"), ("POLARITY", "NEGATIVE"))]
+    output.mkdir(parents=True)
+    (output / "corpus.draft.jsonl").write_text("".join(json.dumps(row.to_dict(), ensure_ascii=False) + "\n" for row in rows), encoding="utf-8")
+    files = {
+        "inventory.draft.json": {"actions": actions, "approved_by_language": {"en": [], "vi": [], "cham_phan_rang": []}, "proposed_by_language": {"en": actions, "vi": actions}},
+        "alignments.draft.json": {"edge_pairs": edges, "path_pairs": paths},
+        "groups.json": groups,
+        "data_statement.json": {"source": "original AI-authored synthetic controlled-language pilot", "phomt_used": False,
+                                "human_validated": False, "languages": ["en", "vi"], "event_families": len(groups),
+                                "records": len(rows), "draft_sha256": dataset_fingerprint(rows),
+                                "split_policy": "Disjoint event/predicate families; fixed before training. Shared sentence templates occur in all partitions; this is NOT template- or domain-generalization evidence.",
+                                "held_out_path": "TIME=PAST -> POLARITY=NEGATIVE is absent from train/validation paths; single actions remain in train.",
+                                "limitations": ["AI-authored and AI-reviewed only", "Small repetitive templates", "Single accepted target per state", "No natural-corpus or human-language efficacy claim"]},
+    }
+    frames = {}
+    for split, families in FAMILIES.items():
+        for family in families:
+            event, *texts = family
+            for index in range(4):
+                frames[f"authored-{event}-state-{index}"] = {"event": event, "state_index": index,
+                    "time": "past" if index >= 2 else "present", "polarity": "negative" if index in (1, 3) else "positive",
+                    "context": "same synthetic event; only declared time and polarity change"}
+    files["semantic_frames.draft.json"] = frames
+    for name, value in files.items():
+        (output / name).write_text(json.dumps(value, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    return files["data_statement.json"]
+
+
+# Fresh synthetic event families for a source-attention model iteration.
+# Splits are fixed at 20/6/6 families before any v4.2 training run.
+FAMILIES_V42 = {
+    "train": [
+        ("squeeze", "Thuy", "squeeze", "squeezes", "squeezed", "a lemon", "Thủy", "vắt", "một quả chanh"),
+        ("peel", "Bao Chau", "peel", "peels", "peeled", "an orange", "Bảo Châu", "gọt vỏ", "một quả cam"),
+        ("grill", "Quoc", "grill", "grills", "grilled", "a fish", "Quốc", "nướng", "một con cá"),
+        ("slice", "Ha My", "slice", "slices", "sliced", "bread", "Hà My", "cắt lát", "bánh mì"),
+        ("mix", "Tung", "mix", "mixes", "mixed", "paint", "Tùng", "pha", "sơn"),
+        ("hang_coat", "Ngoc", "hang", "hangs", "hung", "a coat", "Ngọc", "treo", "một chiếc áo khoác"),
+        ("lock_gate", "Viet", "lock", "locks", "locked", "a gate", "Việt", "khóa", "một cánh cổng"),
+        ("unlock_gate", "Phuc An", "unlock", "unlocks", "unlocked", "a gate", "Phúc An", "mở khóa", "một cánh cổng"),
+        ("pack_lunch", "Mai Anh", "pack", "packs", "packed", "a lunch", "Mai Anh", "chuẩn bị", "một phần ăn trưa"),
+        ("unpack_box", "Gia Bao", "unpack", "unpacks", "unpacked", "a box", "Gia Bảo", "mở", "một chiếc hộp"),
+        ("climb_ladder", "Ngan", "climb", "climbs", "climbed", "a ladder", "Ngân", "leo lên", "một chiếc thang"),
+        ("push_cart", "Kiet", "push", "pushes", "pushed", "a cart", "Kiệt", "đẩy", "một chiếc xe đẩy"),
+        ("pull_wagon", "Thao Vy", "pull", "pulls", "pulled", "a wagon", "Thảo Vy", "kéo", "một chiếc xe kéo"),
+        ("repair_clock", "Dat", "repair", "repairs", "repaired", "a clock", "Đạt", "sửa", "một chiếc đồng hồ"),
+        ("deliver_package", "Quynh Anh", "deliver", "delivers", "delivered", "a package", "Quỳnh Anh", "giao", "một bưu kiện"),
+        ("wipe_mirror", "Trinh", "wipe", "wipes", "wiped", "a mirror", "Trinh", "lau", "một chiếc gương"),
+        ("fill_bottle", "Duc", "fill", "fills", "filled", "a bottle", "Đức", "rót đầy", "một chai nước"),
+        ("empty_basket", "Khanh Linh", "empty", "empties", "emptied", "a basket", "Khánh Linh", "đổ hết", "một chiếc giỏ"),
+        ("wrap_gift", "Minh Chau", "wrap", "wraps", "wrapped", "a gift", "Minh Châu", "gói", "một món quà"),
+        ("untie_knot", "Hanh", "untie", "unties", "untied", "a knot", "Hạnh", "tháo", "một nút thắt"),
+    ],
+    "validation": [
+        ("cut_cloth", "Thu Nhi", "cut", "cuts", "cut", "cloth", "Thu Nhi", "cắt", "vải"),
+        ("grind_coffee", "Thanh", "grind", "grinds", "ground", "coffee", "Thanh", "xay", "cà phê"),
+        ("light_candle", "Quang Minh", "light", "lights", "lit", "a candle", "Quang Minh", "thắp", "một ngọn nến"),
+        ("extinguish_candle", "Diem", "extinguish", "extinguishes", "extinguished", "a candle", "Diễm", "thổi tắt", "một ngọn nến"),
+        ("raise_flag", "Bao Ngoc", "raise", "raises", "raised", "a flag", "Bảo Ngọc", "kéo lên", "một lá cờ"),
+        ("lower_flag", "Anh Khoa", "lower", "lowers", "lowered", "a flag", "Anh Khoa", "hạ xuống", "một lá cờ"),
+    ],
+    "test": [
+        ("assemble_shelf", "Manh", "assemble", "assembles", "assembled", "a shelf", "Mạnh", "lắp ráp", "một chiếc kệ"),
+        ("braid_hair", "Yen", "braid", "braids", "braided", "hair", "Yến", "tết", "tóc"),
+        ("drain_pasta", "Hieu Minh", "drain", "drains", "drained", "the pasta", "Hiếu Minh", "để ráo", "mì ống"),
+        ("fasten_belt", "Thien", "fasten", "fastens", "fastened", "a belt", "Thiện", "thắt", "một chiếc thắt lưng"),
+        ("sharpen_pencil", "Ly", "sharpen", "sharpens", "sharpened", "a pencil", "Ly", "gọt", "một cây bút chì"),
+        ("tie_ribbon", "Hoai", "tie", "ties", "tied", "a ribbon", "Hoài", "buộc", "một dải ruy băng"),
+    ],
+}
+
+# v4.3 is a fresh compositional probe. Every agent, verb lemma and object phrase
+# occurs in training, while the event-frame triples assigned to validation and
+# release holdout are new combinations. This directly tests recombination of
+# known lexical material instead of holding out every word with each event.
+_V43_AGENTS = (
+    ("Lan", "Lan"), ("Nam", "Nam"), ("Mai", "Mai"), ("Minh", "Minh"),
+    ("Hoa", "Hoa"), ("An", "An"), ("Binh", "Bình"), ("Linh", "Linh"),
+)
+_V43_VERBS = (
+    ("read", "reads", "read", "đọc"), ("wash", "washes", "washed", "rửa"),
+    ("open", "opens", "opened", "mở"), ("draw", "draws", "drew", "vẽ"),
+    ("carry", "carries", "carried", "mang"), ("cook", "cooks", "cooked", "nấu"),
+    ("write", "writes", "wrote", "viết"), ("buy", "buys", "bought", "mua"),
+)
+_V43_PATIENTS = (
+    ("a book", "một quyển sách"), ("a cup", "một cái cốc"),
+    ("the door", "cánh cửa"), ("a flower", "một bông hoa"),
+    ("a bag", "một cái túi"), ("rice", "cơm"),
+    ("a letter", "một lá thư"), ("bread", "bánh mì"),
+)
+
+
+def _compose_v43_families():
+    partitions = {"train": [], "validation": [], "test": []}
+    for b in range(4):
+        for a in range(8):
+            if b < 2 or (b == 2 and a < 4):
+                split = "train"
+            elif (b == 2 and a < 8) or (b == 3 and a < 2):
+                split = "validation"
+            else:
+                split = "test"
+            verb_en, present, past, verb_vi = _V43_VERBS[(a + b) % len(_V43_VERBS)]
+            patient_en, patient_vi = _V43_PATIENTS[(3 * a + b) % len(_V43_PATIENTS)]
+            agent_en, agent_vi = _V43_AGENTS[a]
+            partitions[split].append((f"compose_{a}_{b}", agent_en, verb_en, present, past,
+                                      patient_en, agent_vi, verb_vi, patient_vi))
+    return partitions
+
+
+FAMILIES_V43 = _compose_v43_families()
+
+# v4.4 increases compositional coverage while holding optimizer updates constant.
+# All lexical factors are shared, broad-compatibility transitive actions and
+# objects reduce semantic oddities in the recombined event frames.
+_V44_AGENTS = _V43_AGENTS
+_V44_VERBS = (
+    ("move", "moves", "moved", "di chuyển"), ("carry", "carries", "carried", "mang"),
+    ("find", "finds", "found", "tìm thấy"), ("bring", "brings", "brought", "mang đến"),
+    ("photograph", "photographs", "photographed", "chụp ảnh"),
+    ("wrap", "wraps", "wrapped", "gói"), ("buy", "buys", "bought", "mua"),
+    ("pack", "packs", "packed", "đóng gói"),
+)
+_V44_PATIENTS = (
+    ("a package", "một bưu kiện"), ("a box", "một chiếc hộp"),
+    ("a book", "một quyển sách"), ("a bag", "một cái túi"),
+    ("a gift", "một món quà"), ("a letter", "một lá thư"),
+    ("a basket", "một cái giỏ"), ("a suitcase", "một chiếc va li"),
+)
+
+
+def _compose_v44_families():
+    import random
+
+    covered = []
+    for block in range(8):
+        for agent in range(8):
+            covered.append((agent, (agent + block) % 8, (3 * agent + block) % 8))
+    all_combinations = [(agent, verb, patient)
+                        for agent in range(8) for verb in range(8) for patient in range(8)]
+    selected = set(covered)
+    for triple in all_combinations:
+        if len(covered) == 80:
+            break
+        if triple not in selected:
+            covered.append(triple)
+            selected.add(triple)
+    remaining = [triple for triple in all_combinations if triple not in selected]
+    random.Random(20261002).shuffle(remaining)
+    validation, test = remaining[:12], remaining[12:24]
+    result = {"train": [], "validation": [], "test": []}
+    for split, combinations in (("train", covered), ("validation", validation), ("test", test)):
+        for index, (agent, verb, patient) in enumerate(combinations):
+            agent_en, agent_vi = _V44_AGENTS[agent]
+            base, present, past, verb_vi = _V44_VERBS[verb]
+            patient_en, patient_vi = _V44_PATIENTS[patient]
+            result[split].append((f"compose_{agent}_{verb}_{patient}", agent_en, base, present, past,
+                                  patient_en, agent_vi, verb_vi, patient_vi))
+    return result
+
+
+FAMILIES_V44 = _compose_v44_families()
+
+# v4.5 is disjoint from every v4.4 frame combination, including its sealed
+# release holdout. The split is sampled from the remaining compositional space
+# while train is guaranteed to cover every agent, verb and patient.
+def _compose_v45_families():
+    import random
+
+    previously_used = {tuple(map(int, row[0].removeprefix("compose_").split("_")))
+                       for split in FAMILIES_V44.values() for row in split}
+    remaining = [(agent, verb, patient)
+                 for agent in range(8) for verb in range(8) for patient in range(8)
+                 if (agent, verb, patient) not in previously_used]
+    random.Random(20261003).shuffle(remaining)
+    train = []
+    agents, verbs, patients = set(), set(), set()
+    while remaining and (len(agents) < 8 or len(verbs) < 8 or len(patients) < 8):
+        triple = remaining.pop()
+        train.append(triple)
+        agents.add(triple[0])
+        verbs.add(triple[1])
+        patients.add(triple[2])
+    train.extend(remaining[:80 - len(train)])
+    selected = set(train)
+    held_out = [triple for triple in remaining[80 - len(train):] if triple not in selected]
+    validation, test = held_out[:12], held_out[12:24]
+
+    result = {"train": [], "validation": [], "test": []}
+    for split, combinations in (("train", train), ("validation", validation), ("test", test)):
+        for agent, verb, patient in combinations:
+            agent_en, agent_vi = _V44_AGENTS[agent]
+            base, present, past, verb_vi = _V44_VERBS[verb]
+            patient_en, patient_vi = _V44_PATIENTS[patient]
+            event = f"compose45_{agent}_{verb}_{patient}"
+            result[split].append((event, agent_en, base, present, past,
+                                  patient_en, agent_vi, verb_vi, patient_vi))
+    return result
+
+
+FAMILIES_V45 = _compose_v45_families()
+
+
+_V46_PROGRESSIVE = {
+    "move": "moving", "carry": "carrying", "find": "finding", "bring": "bringing",
+    "photograph": "photographing", "wrap": "wrapping", "buy": "buying", "pack": "packing",
+}
+
+
+def _compose_v46_families():
+    import random
+
+    previously_used = set()
+    for family_map, prefix in ((FAMILIES_V44, "compose_"), (FAMILIES_V45, "compose45_")):
+        previously_used.update(tuple(map(int, row[0].removeprefix(prefix).split("_")))
+                               for split in family_map.values() for row in split)
+    remaining = [(agent, verb, patient)
+                 for agent in range(8) for verb in range(8) for patient in range(8)
+                 if (agent, verb, patient) not in previously_used]
+    random.Random(20261004).shuffle(remaining)
+    train = []
+    agents, verbs, patients = set(), set(), set()
+    while remaining and (len(agents) < 8 or len(verbs) < 8 or len(patients) < 8):
+        triple = remaining.pop()
+        train.append(triple)
+        agents.add(triple[0])
+        verbs.add(triple[1])
+        patients.add(triple[2])
+    train.extend(remaining[:80 - len(train)])
+    selected = set(train)
+    held_out = [triple for triple in remaining[80 - len(train):] if triple not in selected]
+    validation, test = held_out[:12], held_out[12:24]
+
+    result = {"train": [], "validation": [], "test": []}
+    for split, combinations in (("train", train), ("validation", validation), ("test", test)):
+        for agent, verb, patient in combinations:
+            agent_en, agent_vi = _V44_AGENTS[agent]
+            base, present, past, verb_vi = _V44_VERBS[verb]
+            result[split].append((f"compose46_{agent}_{verb}_{patient}", agent_en, base,
+                                  present, past, _V44_PATIENTS[patient][0], agent_vi,
+                                  verb_vi, _V44_PATIENTS[patient][1]))
+    return result
+
+
+FAMILIES_V46 = _compose_v46_families()
+
+
+def _compose_v47_families():
+    """Build fresh triples whose held-out pairwise factors are all trained."""
+    import random
+
+    previously_used = set()
+    for family_map, prefix in ((FAMILIES_V44, "compose_"),
+                               (FAMILIES_V45, "compose45_"),
+                               (FAMILIES_V46, "compose46_")):
+        previously_used.update(tuple(map(int, row[0].removeprefix(prefix).split("_")))
+                               for split in family_map.values() for row in split)
+    remaining = [(agent, verb, patient)
+                 for agent in range(8) for verb in range(8) for patient in range(8)
+                 if (agent, verb, patient) not in previously_used]
+    if len(remaining) != 200:
+        raise ValueError("v4.7 requires the expected fresh compositional pool")
+
+    train = []
+    pair_sets = (set(), set(), set())
+    while len(train) < 120:
+        best = max(
+            remaining,
+            key=lambda triple: (
+                sum(pair not in known for pair, known in zip(
+                    ((triple[0], triple[1]), (triple[0], triple[2]), (triple[1], triple[2])),
+                    pair_sets)),
+                tuple(-value for value in triple)),
+        )
+        train.append(best)
+        remaining.remove(best)
+        for pair, known in zip(((best[0], best[1]), (best[0], best[2]),
+                                (best[1], best[2])), pair_sets):
+            known.add(pair)
+    if any(not all(pair in known for pair, known in zip(
+            ((triple[0], triple[1]), (triple[0], triple[2]), (triple[1], triple[2])), pair_sets))
+           for triple in remaining):
+        raise ValueError("v4.7 held-out triples must reuse only training-seen factor pairs")
+    random.Random(20261005).shuffle(remaining)
+    validation, test = remaining[:40], remaining[40:80]
+    if len(remaining) != 80:
+        raise ValueError("v4.7 requires 40 validation and 40 release-holdout triples")
+
+    result = {"train": [], "validation": [], "test": []}
+    for split, combinations in (("train", train), ("validation", validation), ("test", test)):
+        for agent, verb, patient in combinations:
+            agent_en, agent_vi = _V44_AGENTS[agent]
+            base, present, past, verb_vi = _V44_VERBS[verb]
+            patient_en, patient_vi = _V44_PATIENTS[patient]
+            result[split].append((f"compose47_{agent}_{verb}_{patient}", agent_en, base,
+                                  present, past, patient_en, agent_vi, verb_vi, patient_vi))
+    return result
+
+
+FAMILIES_V47 = _compose_v47_families()
+
+
+def _compose_v48_families():
+    """Create a fresh agent-factor generalization split with covered pairs."""
+    import random
+
+    agents = _V44_AGENTS + (("Khanh", "Khánh"), ("Quynh", "Quỳnh"), ("Hai", "Hải"))
+    previously_used = set()
+    for family_map, prefix in ((FAMILIES_V44, "compose_"),
+                               (FAMILIES_V45, "compose45_"),
+                               (FAMILIES_V46, "compose46_"),
+                               (FAMILIES_V47, "compose47_")):
+        previously_used.update(tuple(map(int, row[0].removeprefix(prefix).split("_")))
+                               for split in family_map.values() for row in split)
+    remaining = [(agent, verb, patient)
+                 for agent in range(len(agents)) for verb in range(len(_V44_VERBS))
+                 for patient in range(len(_V44_PATIENTS))
+                 if (agent, verb, patient) not in previously_used]
+    if len(remaining) != 192:
+        raise ValueError("v4.8 requires the expected unseen agent-factor pool")
+
+    train = []
+    pair_sets = (set(), set(), set())
+    while len(train) < 112:
+        best = max(
+            remaining,
+            key=lambda triple: (
+                sum(pair not in known for pair, known in zip(
+                    ((triple[0], triple[1]), (triple[0], triple[2]), (triple[1], triple[2])),
+                    pair_sets)),
+                tuple(-value for value in triple)),
+        )
+        train.append(best)
+        remaining.remove(best)
+        for pair, known in zip(((best[0], best[1]), (best[0], best[2]),
+                                (best[1], best[2])), pair_sets):
+            known.add(pair)
+    if any(not all(pair in known for pair, known in zip(
+            ((triple[0], triple[1]), (triple[0], triple[2]), (triple[1], triple[2])), pair_sets))
+           for triple in remaining):
+        raise ValueError("v4.8 held-out triples must reuse only training-seen factor pairs")
+    random.Random(20261006).shuffle(remaining)
+    validation, test = remaining[:40], remaining[40:80]
+    if len(remaining) != 80:
+        raise ValueError("v4.8 requires 40 validation and 40 release-holdout triples")
+
+    result = {"train": [], "validation": [], "test": []}
+    for split, combinations in (("train", train), ("validation", validation), ("test", test)):
+        for agent, verb, patient in combinations:
+            agent_en, agent_vi = agents[agent]
+            base, present, past, verb_vi = _V44_VERBS[verb]
+            patient_en, patient_vi = _V44_PATIENTS[patient]
+            event = f"compose48_{agent}_{verb}_{patient}"
+            result[split].append((event, agent_en, base, present, past,
+                                  patient_en, agent_vi, verb_vi, patient_vi))
+    return result
+
+
+FAMILIES_V48 = _compose_v48_families()
+
+
+def author_seed_v4(output_dir, *, version="v4"):
+    """Create a new AI-authored v4-family draft with explicit bilingual frames."""
+    output = Path(output_dir)
+    if output.exists():
+        raise FileExistsError("seed output already exists; preserve prior evidence and use a new version")
+    rows, edge_pairs, path_pairs, groups, frames = [], [], [], {}, {}
+    single_edges = [(0, 2, "TIME", "PAST"), (2, 0, "TIME", "NOW"),
+                    (0, 1, "POLARITY", "NEGATIVE"), (1, 0, "POLARITY", "POSITIVE"),
+                    (2, 3, "POLARITY", "NEGATIVE"), (3, 2, "POLARITY", "POSITIVE"),
+                    (1, 3, "TIME", "PAST"), (3, 1, "TIME", "NOW")]
+    actions = [{"kind": kind, "value": value} for kind, value in
+               (("TIME", "NOW"), ("TIME", "PAST"), ("POLARITY", "POSITIVE"), ("POLARITY", "NEGATIVE"))]
+    family_map = (FAMILIES_V42 if version == "v4.2" else
+                  FAMILIES_V43 if version == "v4.3" else
+                  FAMILIES_V44 if version == "v4.4" else
+                  FAMILIES_V45 if version == "v4.5" else
+                  FAMILIES_V48 if version == "v4.8" else
+                  FAMILIES_V47 if version == "v4.7" else
+                  FAMILIES_V46 if version == "v4.6" else FAMILIES_V4)
+    for split, families in family_map.items():
+        for definition in families:
+            event, en_agent, en_base, en_present, en_past, en_patient, vi_agent, vi_verb, vi_patient = definition
+            group = f"{version}-{event}"
+            groups[group] = split
+            for index in range(4):
+                past, negative = index >= 2, index in (1, 3)
+                time = "past" if past else "present"
+                polarity = "negative" if negative else "positive"
+                frame = {"event": event, "time": time, "polarity": polarity,
+                         "agent_en": en_agent, "agent_vi": vi_agent,
+                         "predicate_en": en_base, "predicate_vi": vi_verb,
+                         "predicate_en_present": en_present, "predicate_en_past": en_past,
+                         "patient_en": en_patient, "patient_vi": vi_patient,
+                         "context": "same event; requested action changes time or polarity only"}
+                if version in ("v4.6", "v4.7", "v4.8"):
+                    frame["predicate_en_progressive"] = _V46_PROGRESSIVE[en_base]
+                frames[f"{group}-state-{index}"] = frame
+            path_edges = ([(0, 2, "TIME", "PAST"), (2, 3, "POLARITY", "NEGATIVE")]
+                          if split == "test" else
+                          [(0, 1, "POLARITY", "NEGATIVE"), (1, 3, "TIME", "PAST")])
+            for language in ("en", "vi"):
+                for variant in range(2):
+                    state_forms_v4_6 = None
+                    if version in ("v4.6", "v4.7", "v4.8"):
+                        progressive = _V46_PROGRESSIVE[en_base]
+                        state_forms_v4_6 = {
+                            "en": ((f"Right now, {en_agent} is {progressive} {en_patient}.",
+                                    f"{en_agent} is {progressive} {en_patient} right now."),
+                                   (f"Right now, {en_agent} is not {progressive} {en_patient}.",
+                                    f"{en_agent} is not {progressive} {en_patient} right now.")),
+                            "vi": ((f"Bây giờ, {vi_agent} {vi_verb} {vi_patient}.",
+                                    f"{vi_agent} {vi_verb} {vi_patient} bây giờ."),
+                                   (f"Bây giờ, {vi_agent} không {vi_verb} {vi_patient}.",
+                                    f"{vi_agent} không {vi_verb} {vi_patient} bây giờ.")),
+                        }
+                    realized = [state[language][variant] for state in
+                                [{"en": (f"Right now, {en_agent} {en_present} {en_patient}.", f"{en_agent} {en_present} {en_patient} right now."),
+                                  "vi": (f"Bây giờ, {vi_agent} {vi_verb} {vi_patient}.", f"{vi_agent} {vi_verb} {vi_patient} bây giờ.")},
+                                 {"en": (f"Right now, {en_agent} does not {en_base} {en_patient}.", f"{en_agent} does not {en_base} {en_patient} right now."),
+                                  "vi": (f"Bây giờ, {vi_agent} không {vi_verb} {vi_patient}.", f"{vi_agent} không {vi_verb} {vi_patient} bây giờ.")},
+                                 {"en": (f"Yesterday, {en_agent} {en_past} {en_patient}.", f"{en_agent} {en_past} {en_patient} yesterday."),
+                                  "vi": (f"Hôm qua, {vi_agent} đã {vi_verb} {vi_patient}.", f"{vi_agent} đã {vi_verb} {vi_patient} hôm qua.")},
+                                 {"en": (f"Yesterday, {en_agent} did not {en_base} {en_patient}.", f"{en_agent} did not {en_base} {en_patient} yesterday."),
+                                  "vi": (f"Hôm qua, {vi_agent} không {vi_verb} {vi_patient}.", f"{vi_agent} không {vi_verb} {vi_patient} hôm qua.")}]]
+                    if state_forms_v4_6 is not None:
+                        realized[0] = state_forms_v4_6[language][0][variant]
+                        realized[1] = state_forms_v4_6[language][1][variant]
+                    for edge_index, (source, target, kind, value) in enumerate(single_edges + path_edges):
+                        is_path = edge_index >= len(single_edges)
+                        rows.append(CorpusRecord(
+                            record_id=f"{group}-{language}-v{variant}-e{edge_index}", split_group_id=group,
+                            language=language, source_text=realized[source], target_text=realized[target],
+                            source_frame_id=f"{group}-state-{source}", target_frame_id=f"{group}-state-{target}",
+                            action=Action(kind, value), provenance_ref=f"tide_jepa/pilot_seed.py:original-ai-authored-{version}",
+                            license_ref="original-ai-authored-internal-research; no-PhoMT-content",
+                            approval_status="pending", path_id=f"{group}-path-v{variant}" if is_path else None,
+                            path_step=edge_index - len(single_edges) if is_path else None))
+                    # Emit each bilingual alignment once. This block sits inside
+                    # the language loop to keep row realization construction
+                    # together, so only its English pass owns the pair records.
+                    if language == "en":
+                        for index in range(10):
+                            edge_pairs.append({"left_record_id": f"{group}-en-v{variant}-e{index}",
+                                               "right_record_id": f"{group}-vi-v{variant}-e{index}",
+                                               "relation": "same_event"})
+                        path_pairs.append({"left_path_id": f"{group}-path-v{variant}", "left_language": "en",
+                                           "right_path_id": f"{group}-path-v{variant}", "right_language": "vi",
+                                           "relation": "same_event"})
+    output.mkdir(parents=True)
+    (output / "corpus.draft.jsonl").write_text("".join(json.dumps(row.to_dict(), ensure_ascii=False) + "\n" for row in rows), encoding="utf-8")
+    artifacts = {
+        "inventory.draft.json": {"actions": actions, "approved_by_language": {"en": [], "vi": [], "cham_phan_rang": []},
+                                  "proposed_by_language": {"en": actions, "vi": actions}},
+        "alignments.draft.json": {"edge_pairs": edge_pairs, "path_pairs": path_pairs},
+        "groups.json": groups,
+        "data_statement.json": {"version": f"vi-en-ai-{version}", "source": "original AI-authored synthetic controlled-language pilot",
+                                "phomt_used": False, "human_validated": False, "languages": ["en", "vi"],
+                                "event_families": len(groups), "records": len(rows),
+                                "draft_sha256": dataset_fingerprint(rows),
+                                "split_policy": ("20 train, 6 validation, 6 release-holdout event families, fixed before model selection; fresh families not used in prior versions"
+                                                 if version == "v4.2" else
+                                                 "20 train, 6 validation, 6 release-holdout event combinations; every agent, verb lemma and patient phrase occurs in training; all combinations are frame/group-disjoint; test path order is held out"
+                                                 if version == "v4.3" else
+                                                 "80 train, 12 validation, 12 release-holdout event combinations; every agent, verb lemma and patient phrase occurs in training; frame/group-disjoint combinations built from broadly compatible actions and objects; test path order is held out"
+                                                 if version == "v4.4" else
+                                                 "80 train, 12 validation, 12 release-holdout event combinations sampled outside every v4.4 combination; all agent, verb lemma, and patient phrase values occur in training; new holdout combinations are not reused from the prior version"
+                                                 if version == "v4.5" else
+                                                 "80 train, 12 validation, 12 release-holdout event combinations sampled outside every v4.4 and v4.5 combination; all agent, verb lemma, and patient phrase values occur in training; English NOW uses present progressive; new holdout combinations are unused by prior versions"
+                                                 if version == "v4.6" else
+                                                 "120 train, 40 validation, 40 release-holdout event combinations sampled outside every v4.4-v4.6 combination; all agent, verb lemma, and patient phrase values occur in training; every validation and release-holdout triple uses only factor pairs represented in training; English NOW uses present progressive"
+                                                 if version == "v4.7" else
+                                                 "112 train, 40 validation, 40 release-holdout event combinations using three new agents; every held-out agent-verb, agent-patient, and verb-patient pair is represented in training; held-out combinations are disjoint from v4.4-v4.7; English NOW uses present progressive"
+                                                 if version == "v4.8" else
+                                                 "12 train, 4 validation, 4 release-holdout event families, fixed before model selection; new events not used in v3"),
+                                "surface_realizations_per_state": 2,
+                                "limitations": ["AI-authored; independent AI review is preliminary", "synthetic shared grammar; no domain-generalization claim",
+                                                "single deterministic reference per realization", "no human evaluation or natural-corpus efficacy"]},
+        "semantic_frames.draft.json": frames,
+    }
+    for name, value in artifacts.items():
+        (output / name).write_text(json.dumps(value, ensure_ascii=False, sort_keys=True, indent=2) + "\n", encoding="utf-8")
+    return artifacts["data_statement.json"]
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Author a pending original synthetic Vi–En pilot for review")
+    parser.add_argument("output_dir")
+    parser.add_argument("--pilot-version", choices=("v3", "v4", "v4.1", "v4.2", "v4.3", "v4.4", "v4.5", "v4.6", "v4.7", "v4.8"), default="v3")
+    args = parser.parse_args()
+    result = (author_seed(args.output_dir) if args.pilot_version == "v3"
+              else author_seed_v4(args.output_dir, version=args.pilot_version))
+    print(json.dumps(result, sort_keys=True, indent=2))
+
+
+if __name__ == "__main__":
+    main()

@@ -1,0 +1,682 @@
+"""Integration checks use original synthetic fixtures only, never PhoMT rows."""
+
+from contextlib import redirect_stdout
+import hashlib
+import importlib.util
+import io
+import json
+from pathlib import Path
+import tempfile
+import unittest
+import zipfile
+
+from tide_jepa.phomt_intake import TRAIN_MEMBERS, _select_pairs
+from tide_jepa.data import dataset_fingerprint, read_jsonl
+from tide_jepa.pilot_seed import (FAMILIES_V43, FAMILIES_V44, FAMILIES_V45,
+                                  FAMILIES_V46, FAMILIES_V47, FAMILIES_V48, author_seed,
+                                  author_seed_v4)
+from tide_jepa.schema import Action, Inventory
+
+TORCH_AVAILABLE = importlib.util.find_spec("torch") is not None
+
+
+class SourceSelectionTests(unittest.TestCase):
+    def make_zip(self, en, vi):
+        memory = io.BytesIO()
+        with zipfile.ZipFile(memory, "w") as archive:
+            archive.writestr(TRAIN_MEMBERS[0], en)
+            archive.writestr(TRAIN_MEMBERS[1], vi)
+            archive.writestr("PhoMT/detokenization/test/test.en", b"DO NOT READ")
+        memory.seek(0)
+        return zipfile.ZipFile(memory)
+
+    def test_selection_is_deterministic_and_reads_train_only(self):
+        en = "\n".join(f"original test English {n}" for n in range(50))
+        vi = "\n".join(f"ví dụ tự tạo {n}" for n in range(50))
+        with self.make_zip(en, vi) as archive:
+            first = _select_pairs(archive, count=5, seed=7, max_bytes=128)
+        with self.make_zip(en, vi) as archive:
+            second = _select_pairs(archive, count=5, seed=7, max_bytes=128)
+        self.assertEqual(first, second)
+        self.assertEqual(first[1:], (50, 50))
+        self.assertTrue(all("DO NOT READ" not in pair["en"] for pair in first[0]))
+
+    def test_pair_count_mismatch_and_bad_utf8_fail_without_text(self):
+        with self.make_zip(b"private-test-only\nextra\n", b"one\n") as archive:
+            with self.assertRaisesRegex(ValueError, "different line counts"):
+                _select_pairs(archive, count=5, seed=7, max_bytes=128)
+        with self.make_zip(b"secret-fixture\xff", b"one") as archive:
+            with self.assertRaises(ValueError) as raised:
+                _select_pairs(archive, count=5, seed=7, max_bytes=128)
+        self.assertNotIn("secret-fixture", str(raised.exception))
+
+    def test_empty_long_and_duplicate_source_sentences_are_filtered(self):
+        with self.make_zip("Same\nsame\n\nvery long content\n", "Một\nHai\nBa\nBốn\n") as archive:
+            pairs, total, eligible = _select_pairs(archive, count=10, seed=7, max_bytes=10)
+        self.assertEqual(total, 4)
+        self.assertEqual(eligible, 2)
+        self.assertEqual(len(pairs), 1)
+
+
+class SeedAuthoringTests(unittest.TestCase):
+    def test_quality_gate_applies_to_frozen_primary_mode_only(self):
+        from tide_jepa.pilot import _quality_gate_status
+        passing = {"en/single/action": {"valid_unicode_pass": True, "action_fidelity_pass": True}}
+        failing = {"en/single/action": {"valid_unicode_pass": True, "action_fidelity_pass": False}}
+        self.assertEqual(_quality_gate_status("tide", "tide", passing), "pass")
+        self.assertEqual(_quality_gate_status("tide", "tide", failing), "fail")
+        self.assertEqual(_quality_gate_status("tide", "token_only", failing), "control_only")
+        self.assertEqual(_quality_gate_status("tide", "tide", {}), "fail")
+
+    def test_v43_is_frame_disjoint_compositional_split(self):
+        train = FAMILIES_V43["train"]
+        validation = FAMILIES_V43["validation"]
+        test = FAMILIES_V43["test"]
+        components = lambda rows, position: {row[position] for row in rows}
+        self.assertEqual((len(train), len(validation), len(test)), (20, 6, 6))
+        self.assertEqual(len({row[0] for row in train + validation + test}), 32)
+        self.assertFalse(set(row[0] for row in train) & set(row[0] for row in validation + test))
+        for held_out in (validation, test):
+            for position in (1, 2, 5):
+                self.assertLessEqual(components(held_out, position), components(train, position),
+                                     "held-out combination contains an unseen lexical component")
+        train_triples = {(row[1], row[2], row[5]) for row in train}
+        self.assertFalse(train_triples & {(row[1], row[2], row[5]) for row in validation + test})
+        with tempfile.TemporaryDirectory() as temporary:
+            destination = Path(temporary) / "v4.3"
+            statement = author_seed_v4(destination, version="v4.3")
+            inventory_value = json.loads((destination / "inventory.draft.json").read_text(encoding="utf-8"))
+            actions = tuple(Action(**value) for value in inventory_value["actions"])
+            inventory = Inventory(actions, {
+                language: frozenset(Action(**value) for value in inventory_value["proposed_by_language"][language])
+                for language in ("en", "vi")
+            })
+            rows = read_jsonl(destination / "corpus.draft.jsonl", inventory,
+                              languages=("en", "vi"), require_approved=False)
+            groups = json.loads((destination / "groups.json").read_text(encoding="utf-8"))
+            self.assertEqual(len(rows), 1280)
+            self.assertEqual(statement["draft_sha256"], dataset_fingerprint(rows))
+            self.assertEqual({name: list(groups.values()).count(name)
+                              for name in ("train", "validation", "test")},
+                             {"train": 20, "validation": 6, "test": 6})
+            self.assertFalse(statement["human_validated"])
+
+    def test_v44_is_compositional_split_with_seen_lexical_components(self):
+        train = FAMILIES_V44["train"]
+        validation = FAMILIES_V44["validation"]
+        test = FAMILIES_V44["test"]
+        component_set = lambda rows, positions: {row[position] for row in rows for position in positions}
+        self.assertEqual((len(train), len(validation), len(test)), (80, 12, 12))
+        self.assertEqual(len({row[0] for row in train + validation + test}), 104)
+        train_triples = {(row[1], row[2], row[5]) for row in train}
+        heldout_triples = {(row[1], row[2], row[5]) for row in validation + test}
+        self.assertFalse(train_triples & heldout_triples)
+        for held_out in (validation, test):
+            self.assertLessEqual(component_set(held_out, (1, 2, 5)),
+                                 component_set(train, (1, 2, 5)))
+        with tempfile.TemporaryDirectory() as temporary:
+            destination = Path(temporary) / "v4.4"
+            statement = author_seed_v4(destination, version="v4.4")
+            inventory_value = json.loads((destination / "inventory.draft.json").read_text(encoding="utf-8"))
+            actions = tuple(Action(**value) for value in inventory_value["actions"])
+            inventory = Inventory(actions, {
+                language: frozenset(Action(**value) for value in inventory_value["proposed_by_language"][language])
+                for language in ("en", "vi")
+            })
+            rows = read_jsonl(destination / "corpus.draft.jsonl", inventory,
+                              languages=("en", "vi"), require_approved=False)
+            groups = json.loads((destination / "groups.json").read_text(encoding="utf-8"))
+            self.assertEqual(len(rows), 4160)
+            self.assertEqual(statement["draft_sha256"], dataset_fingerprint(rows))
+            self.assertEqual({name: list(groups.values()).count(name)
+                              for name in ("train", "validation", "test")},
+                             {"train": 80, "validation": 12, "test": 12})
+            self.assertFalse(statement["human_validated"])
+
+    def test_v45_uses_new_combinations_and_covers_train_lexicon(self):
+        train = FAMILIES_V45["train"]
+        validation = FAMILIES_V45["validation"]
+        test = FAMILIES_V45["test"]
+        combinations = lambda rows: {(row[1], row[2], row[5]) for row in rows}
+        components = lambda rows, position: {row[position] for row in rows}
+        prior = {tuple(map(int, row[0].removeprefix("compose_").split("_")))
+                 for families in FAMILIES_V44.values() for row in families}
+        train_combinations = combinations(train)
+        held_out_combinations = combinations(validation + test)
+        self.assertEqual((len(train), len(validation), len(test)), (80, 12, 12))
+        self.assertEqual(len(train_combinations | held_out_combinations), 104)
+        self.assertFalse(train_combinations & held_out_combinations)
+        prior_surfaces = {(FAMILIES_V44[split][index][1], FAMILIES_V44[split][index][2],
+                           FAMILIES_V44[split][index][5])
+                          for split in FAMILIES_V44 for index in range(len(FAMILIES_V44[split]))}
+        self.assertEqual(len(prior), 104)
+        self.assertFalse((train_combinations | held_out_combinations) & prior_surfaces)
+        for held_out in (validation, test):
+            for position in (1, 2, 5):
+                self.assertLessEqual(components(held_out, position), components(train, position))
+        with tempfile.TemporaryDirectory() as temporary:
+            destination = Path(temporary) / "v4.5"
+            statement = author_seed_v4(destination, version="v4.5")
+            inventory_value = json.loads((destination / "inventory.draft.json").read_text(encoding="utf-8"))
+            actions = tuple(Action(**value) for value in inventory_value["actions"])
+            inventory = Inventory(actions, {
+                language: frozenset(Action(**value) for value in inventory_value["proposed_by_language"][language])
+                for language in ("en", "vi")
+            })
+            rows = read_jsonl(destination / "corpus.draft.jsonl", inventory,
+                              languages=("en", "vi"), require_approved=False)
+            groups = json.loads((destination / "groups.json").read_text(encoding="utf-8"))
+            self.assertEqual(len(rows), 4160)
+            self.assertEqual(statement["draft_sha256"], dataset_fingerprint(rows))
+            self.assertEqual({name: list(groups.values()).count(name)
+                              for name in ("train", "validation", "test")},
+                             {"train": 80, "validation": 12, "test": 12})
+            self.assertFalse(statement["human_validated"])
+
+    def test_v46_progressive_grammar_and_fresh_combinations(self):
+        train = FAMILIES_V46["train"]
+        validation = FAMILIES_V46["validation"]
+        test = FAMILIES_V46["test"]
+        prior = set()
+        for family_map, prefix in ((FAMILIES_V44, "compose_"),
+                                   (FAMILIES_V45, "compose45_")):
+            prior.update(tuple(map(int, row[0].removeprefix(prefix).split("_")))
+                         for families in family_map.values() for row in families)
+        current = {tuple(map(int, row[0].removeprefix("compose46_").split("_")))
+                   for row in train + validation + test}
+        self.assertEqual((len(train), len(validation), len(test)), (80, 12, 12))
+        self.assertEqual(len(current), 104)
+        self.assertFalse(current & prior)
+        for held_out in (validation, test):
+            for position in (1, 2, 5):
+                self.assertLessEqual({row[position] for row in held_out},
+                                     {row[position] for row in train})
+        with tempfile.TemporaryDirectory() as temporary:
+            destination = Path(temporary) / "v4.6"
+            statement = author_seed_v4(destination, version="v4.6")
+            inventory_value = json.loads((destination / "inventory.draft.json").read_text(encoding="utf-8"))
+            actions = tuple(Action(**value) for value in inventory_value["actions"])
+            inventory = Inventory(actions, {
+                language: frozenset(Action(**value) for value in inventory_value["proposed_by_language"][language])
+                for language in ("en", "vi")
+            })
+            rows = read_jsonl(destination / "corpus.draft.jsonl", inventory,
+                              languages=("en", "vi"), require_approved=False)
+            frames = json.loads((destination / "semantic_frames.draft.json").read_text(encoding="utf-8"))
+            from tide_jepa.pilot import _semantic_frame_flags
+            self.assertEqual(len(rows), 4160)
+            self.assertTrue(all((lambda flags: flags["action_fidelity"] and flags["preservation"])(
+                                _semantic_frame_flags(row.target_text, row.language,
+                                                      frames[row.target_frame_id]))
+                                for row in rows))
+            self.assertEqual(statement["draft_sha256"], dataset_fingerprint(rows))
+            self.assertFalse(statement["human_validated"])
+
+    def test_v47_pairwise_covered_compositional_holdout(self):
+        train = FAMILIES_V47["train"]
+        validation = FAMILIES_V47["validation"]
+        test = FAMILIES_V47["test"]
+        prior = set()
+        for family_map, prefix in ((FAMILIES_V44, "compose_"),
+                                   (FAMILIES_V45, "compose45_"),
+                                   (FAMILIES_V46, "compose46_")):
+            prior.update(tuple(map(int, row[0].removeprefix(prefix).split("_")))
+                         for families in family_map.values() for row in families)
+        current = {tuple(map(int, row[0].removeprefix("compose47_").split("_")))
+                   for row in train + validation + test}
+        self.assertEqual((len(train), len(validation), len(test)), (120, 40, 40))
+        self.assertEqual(len(current), 200)
+        self.assertFalse(current & prior)
+
+        def factor_pairs(families):
+            triples = [tuple(map(int, row[0].removeprefix("compose47_").split("_")))
+                       for row in families]
+            return ({(a, v) for a, v, _ in triples},
+                    {(a, p) for a, _, p in triples},
+                    {(v, p) for _, v, p in triples})
+
+        train_pairs = factor_pairs(train)
+        self.assertEqual(tuple(map(len, train_pairs)), (62, 63, 64))
+        for held_out in (validation, test):
+            held_pairs = factor_pairs(held_out)
+            for observed, covered in zip(held_pairs, train_pairs):
+                self.assertLessEqual(observed, covered)
+        with tempfile.TemporaryDirectory() as temporary:
+            destination = Path(temporary) / "v4.7"
+            statement = author_seed_v4(destination, version="v4.7")
+            inventory_value = json.loads((destination / "inventory.draft.json").read_text(encoding="utf-8"))
+            actions = tuple(Action(**value) for value in inventory_value["actions"])
+            inventory = Inventory(actions, {
+                language: frozenset(Action(**value) for value in inventory_value["proposed_by_language"][language])
+                for language in ("en", "vi")
+            })
+            rows = read_jsonl(destination / "corpus.draft.jsonl", inventory,
+                              languages=("en", "vi"), require_approved=False)
+            groups = json.loads((destination / "groups.json").read_text(encoding="utf-8"))
+            self.assertEqual(len(rows), 8000)
+            self.assertEqual(statement["draft_sha256"], dataset_fingerprint(rows))
+            self.assertEqual({name: list(groups.values()).count(name)
+                              for name in ("train", "validation", "test")},
+                             {"train": 120, "validation": 40, "test": 40})
+            self.assertFalse(statement["human_validated"])
+
+    def test_v48_new_agent_factor_holdout_has_train_covered_pairs(self):
+        train = FAMILIES_V48["train"]
+        validation = FAMILIES_V48["validation"]
+        test = FAMILIES_V48["test"]
+        prior = set()
+        for family_map, prefix in ((FAMILIES_V44, "compose_"),
+                                   (FAMILIES_V45, "compose45_"),
+                                   (FAMILIES_V46, "compose46_"),
+                                   (FAMILIES_V47, "compose47_")):
+            prior.update(tuple(map(int, row[0].removeprefix(prefix).split("_")))
+                         for families in family_map.values() for row in families)
+        current = {tuple(map(int, row[0].removeprefix("compose48_").split("_")))
+                   for row in train + validation + test}
+        self.assertEqual((len(train), len(validation), len(test)), (112, 40, 40))
+        self.assertEqual(len(current), 192)
+        self.assertTrue(all(agent >= 8 for agent, _, _ in current))
+        self.assertFalse(current & prior)
+
+        def factor_pairs(families):
+            triples = [tuple(map(int, row[0].removeprefix("compose48_").split("_")))
+                       for row in families]
+            return ({(agent, verb) for agent, verb, _ in triples},
+                    {(agent, patient) for agent, _, patient in triples},
+                    {(verb, patient) for _, verb, patient in triples})
+
+        train_pairs = factor_pairs(train)
+        for held_out in (validation, test):
+            for observed, covered in zip(factor_pairs(held_out), train_pairs):
+                self.assertLessEqual(observed, covered)
+        with tempfile.TemporaryDirectory() as temporary:
+            destination = Path(temporary) / "v4.8"
+            statement = author_seed_v4(destination, version="v4.8")
+            inventory_value = json.loads((destination / "inventory.draft.json").read_text(encoding="utf-8"))
+            actions = tuple(Action(**value) for value in inventory_value["actions"])
+            inventory = Inventory(actions, {
+                language: frozenset(Action(**value) for value in inventory_value["proposed_by_language"][language])
+                for language in ("en", "vi")
+            })
+            rows = read_jsonl(destination / "corpus.draft.jsonl", inventory,
+                              languages=("en", "vi"), require_approved=False)
+            groups = json.loads((destination / "groups.json").read_text(encoding="utf-8"))
+            frames = json.loads((destination / "semantic_frames.draft.json").read_text(encoding="utf-8"))
+            from tide_jepa.pilot import _semantic_frame_flags
+            self.assertEqual(len(rows), 7680)
+            self.assertTrue(all((lambda flags: flags and flags["action_fidelity"] and flags["preservation"])(
+                                _semantic_frame_flags(row.target_text, row.language,
+                                                      frames[row.target_frame_id]))
+                                for row in rows))
+            self.assertEqual(statement["draft_sha256"], dataset_fingerprint(rows))
+            self.assertEqual({name: list(groups.values()).count(name)
+                              for name in ("train", "validation", "test")},
+                             {"train": 112, "validation": 40, "test": 40})
+            self.assertFalse(statement["human_validated"])
+
+    def test_v42_seed_has_unique_alignments_and_frozen_group_counts(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            destination = Path(temporary) / "v4.2"
+            statement = author_seed_v4(destination, version="v4.2")
+            inventory_value = json.loads((destination / "inventory.draft.json").read_text(encoding="utf-8"))
+            actions = tuple(Action(**value) for value in inventory_value["actions"])
+            inventory = Inventory(actions, {
+                language: frozenset(Action(**value) for value in inventory_value["proposed_by_language"][language])
+                for language in ("en", "vi")
+            })
+            rows = read_jsonl(destination / "corpus.draft.jsonl", inventory,
+                              languages=("en", "vi"), require_approved=False)
+            alignments = json.loads((destination / "alignments.draft.json").read_text(encoding="utf-8"))
+            edge_signatures = [tuple(sorted(pair.items())) for pair in alignments["edge_pairs"]]
+            path_signatures = [tuple(sorted(pair.items())) for pair in alignments["path_pairs"]]
+            groups = json.loads((destination / "groups.json").read_text(encoding="utf-8"))
+            self.assertEqual(len(rows), 1280)
+            self.assertEqual(statement["draft_sha256"], dataset_fingerprint(rows))
+            self.assertEqual(len(edge_signatures), len(set(edge_signatures)))
+            self.assertEqual(len(edge_signatures), 640)
+            self.assertEqual(len(path_signatures), len(set(path_signatures)))
+            self.assertEqual(len(path_signatures), 64)
+            self.assertEqual({name: list(groups.values()).count(name)
+                              for name in ("train", "validation", "test")},
+                             {"train": 20, "validation": 6, "test": 6})
+            self.assertFalse(statement["human_validated"])
+
+
+class DemoAPITests(unittest.TestCase):
+    def test_local_demo_reports_actual_model_and_rejects_invalid_requests(self):
+        from http.server import HTTPServer
+        from threading import Thread
+        from types import SimpleNamespace
+        from urllib.error import HTTPError
+        from urllib.request import Request, urlopen
+        from tide_jepa.demo import make_handler
+
+        class FakeGenerator:
+            cfg = SimpleNamespace(languages=("en", "vi"))
+            def generate(self, value):
+                if value.get("target_language") not in self.cfg.languages:
+                    raise ValueError("language not approved")
+                return {"generated_text": "Original synthetic output.", "valid_utf8": True}
+        server = HTTPServer(("127.0.0.1", 0), make_handler(FakeGenerator(), {"mode": "generic_jepa", "seed": 41, "human_validated": False, "phomt_trained": False}))
+        worker = Thread(target=server.serve_forever, daemon=True)
+        worker.start()
+        url = f"http://127.0.0.1:{server.server_port}"
+        try:
+            with urlopen(url + "/health") as response:
+                metadata = json.load(response)
+            self.assertEqual((metadata["mode"], metadata["seed"]), ("generic_jepa", 41))
+            valid = Request(url + "/generate", data=json.dumps({"source_language": "en", "target_language": "en", "actions": [{"kind": "TIME", "value": "PAST"}]}).encode(), headers={"Content-Type": "application/json"})
+            with urlopen(valid) as response:
+                self.assertTrue(json.load(response)["valid_utf8"])
+            invalid = Request(url + "/generate", data=b"not-json", headers={"Content-Type": "application/json"})
+            with self.assertRaises(HTTPError) as error:
+                urlopen(invalid)
+            self.assertEqual(error.exception.code, 400)
+            oversized_path = Request(url + "/generate", data=json.dumps({"source_language": "en", "target_language": "en", "actions": [{"kind": "TIME", "value": "PAST"}] * 9}).encode(), headers={"Content-Type": "application/json"})
+            with self.assertRaises(HTTPError) as error:
+                urlopen(oversized_path)
+            self.assertEqual(error.exception.code, 400)
+            with self.assertRaises(HTTPError) as error:
+                urlopen(url + "/../../README.md")
+            self.assertEqual(error.exception.code, 404)
+        finally:
+            server.shutdown()
+            server.server_close()
+            worker.join(timeout=2)
+
+
+@unittest.skipUnless(TORCH_AVAILABLE, "PyTorch is required for pilot freeze and integration")
+class PilotWorkflowTests(unittest.TestCase):
+    def setUp(self):
+        import torch
+        torch.set_num_threads(1)
+        self.temporary = tempfile.TemporaryDirectory()
+        self.base = Path(self.temporary.name) / "original-synthetic"
+        self.statement = author_seed(self.base)
+
+    def tearDown(self):
+        self.temporary.cleanup()
+
+    def write_reviews(self):
+        from tide_jepa.pilot import REVIEWED_ARTIFACTS
+        hashes = {name: hashlib.sha256((self.base / name).read_bytes()).hexdigest() for name in REVIEWED_ARTIFACTS}
+        for name in ("a", "b"):
+            value = {"reviewer_id": f"synthetic-test-reviewer-{name}", "reviewer_type": "AI", "decision": "approve",
+                     "draft_sha256": self.statement["draft_sha256"], "rows_checked": 400, "artifact_sha256": hashes}
+            (self.base / f"review-{name}.json").write_text(json.dumps(value), encoding="utf-8")
+        (self.base / "adjudication.json").write_text(json.dumps({"decision": "approve", "draft_sha256": self.statement["draft_sha256"], "human_validated": False}), encoding="utf-8")
+
+    def freeze(self):
+        from tide_jepa.pilot import freeze_pilot
+        self.write_reviews()
+        return freeze_pilot(self.base, epochs=1, seeds=(17,))
+
+    def test_freeze_requires_two_current_reviews_and_adjudication(self):
+        from tide_jepa.pilot import freeze_pilot
+        with self.assertRaises(FileNotFoundError):
+            freeze_pilot(self.base, epochs=1, seeds=(17,))
+        self.write_reviews()
+        review = json.loads((self.base / "review-b.json").read_text())
+        review["decision"] = "revise"
+        (self.base / "review-b.json").write_text(json.dumps(review))
+        with self.assertRaisesRegex(ValueError, "review missing"):
+            freeze_pilot(self.base, epochs=1, seeds=(17,))
+
+    def test_pending_review_requires_explicit_artifact_bound_adjudication(self):
+        from tide_jepa.pilot import REVIEWED_ARTIFACTS, freeze_pilot
+        self.write_reviews()
+        review = json.loads((self.base / "review-a.json").read_text())
+        review["decision"] = "needs-adjudication"
+        (self.base / "review-a.json").write_text(json.dumps(review), encoding="utf-8")
+        with self.assertRaisesRegex(ValueError, "explicit artifact-bound adjudication"):
+            freeze_pilot(self.base, epochs=1, seeds=(17,))
+
+        hashes = {name: hashlib.sha256((self.base / name).read_bytes()).hexdigest() for name in REVIEWED_ARTIFACTS}
+        reviewers = [json.loads((self.base / f"review-{name}.json").read_text())["reviewer_id"] for name in ("a", "b")]
+        adjudication = {"decision": "approve", "draft_sha256": self.statement["draft_sha256"],
+                        "human_validated": False, "adjudicator_type": "AI", "reviewer_ids": reviewers,
+                        "resolved_review_ids": [reviewers[0]], "artifact_sha256": hashes,
+                        "resolution": "The independent aggregate-only semantic audit resolved the scope concern."}
+        (self.base / "adjudication.json").write_text(json.dumps(adjudication), encoding="utf-8")
+        approval = freeze_pilot(self.base, epochs=1, seeds=(17,))
+        self.assertFalse(approval["human_validated"])
+
+    def test_frozen_split_is_shared_by_all_modes_and_excludes_cham(self):
+        approval = self.freeze()
+        self.assertEqual(approval["languages"], ["en", "vi"])
+        self.assertFalse(approval["human_validated"])
+        configs = [json.loads((self.base / f"{mode}-seed-17.json").read_text()) for mode in ("token_only", "generic_jepa", "static_alignment", "tide")]
+        self.assertEqual({c["frozen_split"] for c in configs}, {"split_manifest.json"})
+        self.assertTrue(all(c["languages"] == ["en", "vi"] for c in configs))
+        split = json.loads((self.base / "split_manifest.json").read_text())
+        self.assertEqual({name: len(ids) for name, ids in split["record_ids"].items()}, {"train": 240, "validation": 80, "test": 80})
+
+    def test_modified_review_is_rejected_before_training(self):
+        from tide_jepa.experiment import run_experiment
+        self.freeze()
+        config_path = self.base / "token_only-seed-17.json"
+        config = json.loads(config_path.read_text())
+        config["output_dir"] = str(self.base / "local-run")
+        config_path.write_text(json.dumps(config))
+        with (self.base / "review-a.json").open("a") as stream:
+            stream.write("\n")
+        with self.assertRaisesRegex(ValueError, "changed after freeze"):
+            run_experiment(config_path, device="cpu")
+        self.assertFalse((self.base / "local-run").exists())
+
+    def test_frozen_manifest_rejects_corpus_change_and_cross_split_text(self):
+        from dataclasses import replace
+        from tide_jepa.data import dataset_fingerprint, read_jsonl, read_split_manifest
+        from tide_jepa.experiment import _parse_inventory
+        self.freeze()
+        inventory = _parse_inventory(json.loads((self.base / "inventory.json").read_text()))
+        rows = read_jsonl(self.base / "corpus.jsonl", inventory)
+        changed = (replace(rows[0], source_text="a changed original synthetic sentence"),) + rows[1:]
+        with self.assertRaisesRegex(ValueError, "fingerprint differs"):
+            read_split_manifest(self.base / "split_manifest.json", changed, inventory)
+        test_index = next(i for i, r in enumerate(rows) if r.split_group_id == "authored-paint" and r.language == rows[0].language)
+        changed = list(rows)
+        changed[test_index] = replace(rows[test_index], source_text=rows[0].source_text)
+        manifest = json.loads((self.base / "split_manifest.json").read_text())
+        manifest["dataset_sha256"] = dataset_fingerprint(changed)
+        (self.base / "split_manifest.json").write_text(json.dumps(manifest))
+        with self.assertRaisesRegex(ValueError, "multiple splits"):
+            read_split_manifest(self.base / "split_manifest.json", changed, inventory)
+
+    def test_train_resume_generate_and_identity_guard(self):
+        from tide_jepa.experiment import run_experiment
+        from tide_jepa.infer import OfflineGenerator
+        self.freeze()
+        path = self.base / "token_only-seed-17.json"
+        config = json.loads(path.read_text())
+        output = self.base / "local-run"
+        config["output_dir"] = str(output)
+        path.write_text(json.dumps(config))
+        with redirect_stdout(io.StringIO()):
+            result = run_experiment(path, device="cpu")
+            resumed = run_experiment(path, resume=True, device="cpu")
+        self.assertFalse(result["test_evaluated"])
+        self.assertEqual(resumed["steps"], result["steps"])
+        self.assertEqual(resumed["best_validation_loss"], result["best_validation_loss"])
+        generator = OfflineGenerator(path, output / "best.pt", device="cpu")
+        response = generator.generate({"source": "Original test source.", "source_language": "en", "target_language": "en", "actions": [{"kind": "TIME", "value": "PAST"}], "max_new_tokens": 2})
+        self.assertIn("valid_utf8", response)
+        self.assertEqual(response["quality_status"], "diagnostic_only")
+        with self.assertRaisesRegex(ValueError, "cross-language"):
+            generator.generate({"source": "Original", "source_language": "vi", "target_language": "en", "actions": [{"kind": "TIME", "value": "PAST"}]})
+        with self.assertRaises(ValueError):
+            generator.generate({"source": "Original", "target_language": "cham_phan_rang", "actions": [{"kind": "TIME", "value": "PAST"}]})
+        with self.assertRaises(FileExistsError):
+            run_experiment(path, device="cpu")
+        config["seed"] = 99
+        path.write_text(json.dumps(config))
+        with self.assertRaisesRegex(ValueError, "checkpoint identity"):
+            OfflineGenerator(path, output / "best.pt", device="cpu")
+        provenance_before = (output / "resolved_run.json").read_bytes()
+        with self.assertRaisesRegex(ValueError, "run identity"):
+            run_experiment(path, resume=True, device="cpu")
+        self.assertEqual((output / "resolved_run.json").read_bytes(), provenance_before)
+
+    def test_invalid_alignment_does_not_publish_approved_artifacts(self):
+        from tide_jepa.pilot import freeze_pilot
+        alignments = json.loads((self.base / "alignments.draft.json").read_text())
+        alignments["edge_pairs"][0]["relation"] = "unknown"
+        (self.base / "alignments.draft.json").write_text(json.dumps(alignments))
+        self.write_reviews()
+        with self.assertRaisesRegex(ValueError, "same_event"):
+            freeze_pilot(self.base, epochs=1, seeds=(17,))
+        for name in ("corpus.jsonl", "inventory.json", "approval.json"):
+            self.assertFalse((self.base / name).exists())
+
+    def test_incomplete_review_hash_map_is_refused(self):
+        from tide_jepa.experiment import _canonical_hash, _parse_inventory
+        from tide_jepa.data import read_jsonl, read_split_manifest
+        from tide_jepa.pilot import validate_review_gate
+        self.freeze()
+        approval = json.loads((self.base / "approval.json").read_text())
+        approval["review_files_sha256"] = {}
+        (self.base / "approval.json").write_text(json.dumps(approval))
+        inventory_value = json.loads((self.base / "inventory.json").read_text())
+        inventory = _parse_inventory(inventory_value)
+        rows = read_jsonl(self.base / "corpus.jsonl", inventory)
+        manifest = read_split_manifest(self.base / "split_manifest.json", rows, inventory)
+        config = json.loads((self.base / "token_only-seed-17.json").read_text())
+        with self.assertRaisesRegex(ValueError, "complete reviews"):
+            validate_review_gate(self.base, config, manifest, _canonical_hash(inventory_value), _canonical_hash(json.loads((self.base / "alignments.json").read_text())))
+
+    def test_interrupted_epoch_resume_matches_uninterrupted_run(self):
+        from unittest.mock import patch
+        import torch
+        from tide_jepa.experiment import run_experiment
+        from tide_jepa.pilot import freeze_pilot
+        from tide_jepa.training import Trainer
+        self.write_reviews()
+        freeze_pilot(self.base, epochs=2, seeds=(17,))
+        config = json.loads((self.base / "tide-seed-17.json").read_text())
+        uninterrupted = self.base / "uninterrupted"
+        interrupted = self.base / "interrupted"
+        config["output_dir"] = str(uninterrupted)
+        first_path = self.base / "first.json"
+        first_path.write_text(json.dumps(config))
+        with redirect_stdout(io.StringIO()):
+            run_experiment(first_path, device="cpu")
+        config["output_dir"] = str(interrupted)
+        second_path = self.base / "second.json"
+        second_path.write_text(json.dumps(config))
+        original_step = Trainer.step
+        calls = []
+        def fail_after_first_epoch(trainer, batch):
+            calls.append(True)
+            if len(calls) == 4:
+                raise RuntimeError("synthetic interruption")
+            return original_step(trainer, batch)
+        with patch.object(Trainer, "step", fail_after_first_epoch), redirect_stdout(io.StringIO()):
+            with self.assertRaisesRegex(RuntimeError, "synthetic interruption"):
+                run_experiment(second_path, device="cpu")
+        with redirect_stdout(io.StringIO()):
+            run_experiment(second_path, resume=True, device="cpu")
+        first = torch.load(uninterrupted / "latest.pt", weights_only=True)
+        second = torch.load(interrupted / "latest.pt", weights_only=True)
+        self.assertEqual(first["steps"], second["steps"])
+        self.assertTrue(all(torch.equal(value, second["model"][key]) for key, value in first["model"].items()))
+
+    def test_latest_best_crash_recovers_and_test_evaluation_is_immutable(self):
+        from unittest.mock import patch
+        import torch
+        import tide_jepa.experiment as experiment
+        self.write_reviews()
+        self.freeze()
+        path = self.base / "token_only-seed-17.json"
+        config = json.loads(path.read_text())
+        output = self.base / "crash-recovery"
+        config["output_dir"] = str(output)
+        path.write_text(json.dumps(config))
+        save = experiment._save_checkpoint
+        def crash_before_best(destination, state):
+            if destination.name == "best.pt":
+                raise RuntimeError("interrupted before best publication")
+            return save(destination, state)
+        with patch.object(experiment, "_save_checkpoint", crash_before_best), redirect_stdout(io.StringIO()):
+            with self.assertRaisesRegex(RuntimeError, "best publication"):
+                experiment.run_experiment(path, device="cpu")
+        latest = torch.load(output / "latest.pt", weights_only=True)
+        self.assertFalse((output / "best.pt").exists())
+        self.assertEqual(latest["best_epoch"], 1)
+        with redirect_stdout(io.StringIO()):
+            first = experiment.run_experiment(path, resume=True, evaluate_test=True, device="cpu")
+        self.assertTrue((output / "best.pt").is_file())
+        self.assertTrue(first["test_evaluated"])
+        original = (output / "test_metrics.json").read_bytes()
+        with patch.object(experiment, "_evaluate", side_effect=AssertionError("must use immutable cache")):
+            second = experiment.run_experiment(path, resume=True, evaluate_test=True, device="cpu")
+        self.assertTrue(second["test_evaluated"])
+        self.assertEqual((output / "test_metrics.json").read_bytes(), original)
+
+    def test_group_batch_preflight_rejects_large_indivisible_group(self):
+        from types import SimpleNamespace
+        from tide_jepa.experiment import _batch_records
+        rows = [SimpleNamespace(split_group_id="oversized", source_text="a", target_text="b") for _ in range(513)]
+        with self.assertRaisesRegex(ValueError, "preflight budget"):
+            list(_batch_records(rows, 32))
+
+    def test_phomt_protected_output_is_rejected_before_directory_creation(self):
+        from dataclasses import replace
+        from tide_jepa.experiment import run_experiment
+        from tide_jepa.data import read_jsonl
+        from tide_jepa.experiment import _parse_inventory
+        self.freeze()
+        inventory = _parse_inventory(json.loads((self.base / "inventory.json").read_text()))
+        rows = list(read_jsonl(self.base / "corpus.jsonl", inventory))
+        rows[0] = replace(rows[0], provenance_ref="approved PhoMT source", license_ref="PhoMT research-only")
+        (self.base / "corpus.jsonl").write_text("".join(json.dumps(r.to_dict(), ensure_ascii=False) + "\n" for r in rows), encoding="utf-8")
+        path = self.base / "token_only-seed-17.json"
+        config = json.loads(path.read_text())
+        destination = Path(self.temporary.name) / "unsafe-output"
+        config["output_dir"] = str(destination)
+        path.write_text(json.dumps(config))
+        with self.assertRaisesRegex(ValueError, "under project data"):
+            run_experiment(path, device="cpu")
+        self.assertFalse(destination.exists())
+
+    def test_evaluation_metrics_use_metric_specific_denominators(self):
+        from types import SimpleNamespace
+        from unittest.mock import patch
+        import tide_jepa.experiment as experiment
+        from tide_jepa.training import Objective
+        rows = (SimpleNamespace(split_group_id="a", source_text="a", target_text="b"),
+                SimpleNamespace(split_group_id="b", source_text="a", target_text="b"),
+                SimpleNamespace(split_group_id="b", source_text="a", target_text="b"),
+                SimpleNamespace(split_group_id="b", source_text="a", target_text="b"))
+        def fake_loss(_model, batch, _inventory, _objective):
+            size = len(batch)
+            return None, {"token": 0.0 if size == 1 else 10.0,
+                          "token_count": 2 if size == 1 else 10,
+                          "copy_token": 6.0 if size == 1 else 8.0,
+                          "copy_token_count": 2 if size == 1 else 10,
+                          "edge_count": size,
+                          "jepa": 2.0 if size == 1 else 4.0,
+                          "alignment_count": 1 if size == 1 else 3,
+                          "alignment": 1.0 if size == 1 else 5.0,
+                          "path_count": 1 if size == 1 else 3,
+                          "path_jepa": 3.0 if size == 1 else 6.0,
+                          "path_token": 7.0 if size == 1 else 9.0,
+                          "path_alignment_count": 1 if size == 1 else 2,
+                          "path_alignment": 2.0 if size == 1 else 8.0,
+                          "variance": 0.0, "latent_std": 1.0}
+        class Model:
+            def eval(self): pass
+        with patch.object(experiment, "_build_experiment_batch", side_effect=lambda batch, *_args: batch), \
+             patch.object(experiment, "compute_loss", side_effect=fake_loss):
+            result = experiment._evaluate(Model(), rows, None, None, Objective(), 2, "cpu", (), ())
+        self.assertAlmostEqual(result["token"], 100 / 12)
+        self.assertEqual(result["token_count"], 12)
+        self.assertAlmostEqual(result["copy_token"], 92 / 12)
+        self.assertEqual(result["copy_token_count"], 12)
+        self.assertAlmostEqual(result["jepa"], 3.5)
+        self.assertAlmostEqual(result["alignment"], 4.0)
+        self.assertAlmostEqual(result["path_token"], 8.5)
+        self.assertEqual(result["alignment_count"], 4)
+
+
+if __name__ == "__main__":
+    unittest.main()

@@ -1,0 +1,4 @@
+# CPU test runtime only. Install inside the project-local Python 3.11 venv.
+# This pins PyTorch itself; transitive dependencies are resolved by pip.
+--index-url https://download.pytorch.org/whl/cpu
+torch==2.14.0+cpu

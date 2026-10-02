@@ -1,0 +1,55 @@
+# TIDE-JEPA — audit toàn dự án trước giai đoạn Chăm
+
+Ngày kiểm tra: 2026-10-02. Mục đích: rà soát lỗi, lập prompt để **người dùng tự đưa sang chat GPT-6-Luna khác**. Không sửa implementation, không tạo repair goal/repair agent hoặc chạy training dữ liệu thật trong lượt này. Các probe có training ngắn chỉ dùng fixture synthetic tự tạo để tái hiện lỗi checkpoint.
+
+Prompt bàn giao chính thức: [LUNA_REPAIR_PROMPT.md](../../LUNA_REPAIR_PROMPT.md). Các prompt thành phần ở báo cáo con chỉ phục vụ một phần audit, không thay thế prompt tổng hợp này. Người dùng chọn GPT-6-Luna high/xhigh trong chat mới rồi dán toàn bộ prompt; prompt có một `/goal` duy nhất.
+
+## Bằng chứng kiểm tra
+
+- Root rerun: 48 CPU tests passed, 0 skipped, 29.779 seconds trong unittest; `pip check`: no broken requirements. Không thay test hoặc code để đạt kết quả này.
+- Root chạy [root_probes.py](root_probes.py), kết quả aggregate ở [root-probe-results.json](root-probe-results.json). Các artifacts synthetic dùng thư mục tạm, được cleanup; không truy cập rows PhoMT.
+- Ba reviewers đều **gpt-6-luna**, model/pipeline `xhigh`, product `high`. Các báo cáo: [model](model-audit.md), [pipeline](pipeline-audit.md), [product](product-audit.md). Root đọc, gộp các findings và bổ sung probe độc lập.
+- Kiểm tra lại archive ở đúng hai vị trí chỉ định: `C:\Users\ANHKHOI\Documents\ChatGPT\RMIT_HACKATHON\data\raw\phomt\PhoMT.zip` tồn tại, 355,890,192 bytes, SHA-256 `fd58972b5058b17d0823b78e6ce7dbb775243e156efa2ca222079dbdd76e6a2e`, đúng giá trị đã cung cấp. `C:\Users\ANHKHOI\Downloads\PhoMT.zip` không thấy. Không thấy tệp PhoMT tải dở theo tên trong hai thư mục; file `PhoMT.metadata-audit.json` là report, không phải download dở. Không tải lại, không mở/giải nén/unpickle archive. Metadata-audit 22 members/13 files là bằng chứng intake trước, không phải auditor được chạy lại trong lượt này.
+- Demo đang chạy trên loopback được reviewer kiểm tra bằng HTTP với dữ liệu synthetic: health và basic 404/415/400 hoạt động. Không restart server hoặc lấy PhoMT vào request.
+
+## Lỗi xác nhận và khoảng trống enforcement
+
+Các ID dưới đây là backlog thống nhất cho chat sửa. P1 ưu tiên tính đúng của evidence/khôi phục, P2 là hợp đồng hoặc robustness cần sửa, P3 malformed input ít ảnh hưởng workflow bình thường. Findings chỉ đúng tại code bàn giao; chat tiếp theo cần tái hiện trước sửa.
+
+| ID | Mức | Phát hiện, vị trí | Bằng chứng / nghiệm thu |
+|---|---|---|---|
+| E01 | P1 | Metric aggregation dùng số rows cho mọi batch-mean; `experiment.py:145`, `training.py:113` | Token CE tổng hợp sai khi độ dài/token counts khác nhau; hai probe độc lập cho 5.0 vs 8.333333 và 5.527216 vs 5.398693. Dùng sufficient statistics đúng unit; token/path/pair metric ổn định theo batch packing. Variance phụ thuộc batch phải được khai báo riêng. |
+| E02 | P1 | Ghi latest trước best tạo crash window; `experiment.py:371` | Root: epoch1/steps3 có latest, không best; resume báo thành công, evaluate test thất bại. Phải recovery/reconcile transactional state và test các điểm interruption, kể cả log. |
+| E03 | P1 | `evaluate_generation` không bind corpus/split/review thực tế vào checkpoint; `pilot.py:176`, `infer.py:51` | Root sửa target text của một test row synthetic, cập nhật manifest hash, giữ approval cũ: generation evaluation vẫn thành công; runner cùng dữ liệu từ chối “review gate differs…”. Generation report không có run/checkpoint/corpus/split digest. Phải reject trước scoring/writing và bind evaluator/decoder/artifacts. |
+| E04 | P2 | Fresh `grouped_split` không kiểm frame/text leakage như frozen manifest; `data.py:303`, `experiment.py:218` | Ba synthetic groups có cùng text/frame được đặt ở cả ba splits. Dùng chung invariant checker cho mọi split route. Pilot v3 frozen đã có check này; không kết luận v3 có leakage xác nhận. |
+| E05 | P2 | Test evidence có thể rescored/overwritten; `experiment.py:412`, `pilot.py:227`, `pilot.py:207` | Đọc code xác nhận direct runner/suite/generation evaluator ghi đè output và không có immutable/cached evaluation record. Repeated deterministic evaluation tự nó không chứng minh test-based tuning; lỗi là không enforce policy/binding. Cache idempotent hoặc refuse, giữ evaluation history có checkpoint/protocol/evaluator identity. |
+| E06 | P2 | Frozen protocol không khóa source/runtime; run hash bỏ review/evaluation code; inference chỉ kiểm self-consistency; `pilot.py:127`, `experiment.py:260`, `infer.py:51` | Có thể chạy suite qua code drift với configs không đổi. Inference current-code compatibility là policy gap, không nhất thiết mọi code change đều không tương thích. Cần explicit version/snapshot policy và drift regression. |
+| E07 | P2 | Generic output destination không enforce privacy root; `experiment.py:200`, `pilot.py:209` | Intake được giới hạn trong data nhưng generic runner/evaluator không có policy tương ứng. Đây là placement risk, chưa xác nhận leak PhoMT đã xảy ra; synthetic original v3 runs hiện được ignored. PhoMT-derived rows phải ở data, không chỉ bất kỳ ignored folder nào. Fail trước write nếu output vi phạm. |
+| E08 | P2 | `batch_size` là soft bound, group có thể lớn tùy ý; `experiment.py:76` | Đọc code: giữ whole group nhưng không preflight group/edge/token memory budget. Thêm hard resource bound hoặc batching bảo toàn paths/alignments an toàn. |
+| E09 | P2 | Direct generation chấp nhận EOS fractional; `model.py:157` | `_validate_generation_args(1, 2.5, 4)` được nhận, integer tokens không thể đạt EOS2.5. Thêm exact integer validation cho EOS/token budgets và public IDs. Adapter bình thường dùng EOS2 nên không phải nguyên nhân chắc chắn của pilot xấu. |
+| E10 | P2 | Direct encoder nhận left-pad dù absolute positions làm latent đổi; `model.py:48` | Left-pad latent max delta0.386273, right-pad0. Batch validator hiện từ chối left-padding. Sửa model boundary hoặc hỗ trợ positions theo valid-token; không cần đổi padding policy nếu rõ ràng reject. |
+| E11 | P3 | EdgePair nhận boolean indices; `schema.py:83` | `EdgePair(True, False, "same_event")` được nhận ở fixture bilingual; path validator đã có exact int. Thống nhất rejection cho malformed indices. |
+| E12 | P2 | HTTP bounded body nhưng không bounded work/read time; `demo.py:36`, `infer.py:74` | Actions không giới hạn, serial HTTPServer/body read thiếu timeout. UI chỉ có hai actions nhưng endpoint cho path dài tùy ý trong 64KiB. Cần path/token/read bounds, local Host/Origin policy thích hợp và regression tránh treo health. |
+| E13 | P2 | Không có source-language contract, nhận request translation không hỗ trợ; `infer.py:67`, `demo.html:19` | UI có source tiếng Việt và dropdown English; backend chỉ target_language, không reject source/target mismatch. Thêm declared source_language và same-language gate, không đoán ngôn ngữ hoàn hảo từ script. |
+| E14 | P2 | Form còn chỉnh được trong request, output không gắn snapshot đã gửi; `demo.html:36` | Response của source/actions cũ xuất hiện cạnh form đã đổi. Disable fields hoặc hiển thị submitted request/stale state, test pending edit. |
+
+## Chất lượng và phần việc còn thiếu — không quy hết thành bug
+
+| ID | Trạng thái | Vấn đề và phạm vi sửa |
+|---|---|---|
+| Q01 | Chặn nghiệm thu generator | Kết quả v3 0/864 exact, 564/864 valid UTF-8; chưa chứng minh useful controlled generation. Decode arbitrary bytes không bảo đảm UTF-8; adapter hiện báo lỗi Unicode, PAD/BOS đã được mask. Cần chẩn đoán data fit/conditioning/optimization/termination và semantic metrics; không có bằng chứng đủ để chỉ ra một nguyên nhân duy nhất. Demo operational-ready khác quality-ready, hiện thiếu quality admission. |
+| G01 | Reproduction gap | Launcher đang dùng registered Python + venv PYTHONPATH workaround; runtime works tại máy này nhưng clean-machine reproduction chưa kiểm. Có requirements pin Torch, chưa full dependency lock. Cần runtime verification/bootstrap/version evidence và launch failure handling; không bắt buộc dùng một venv launcher đang lỗi nếu workaround được kiểm chứng và đóng gói rõ. |
+| G02 | Reporting bug/gap | `scripts/summarize_vi_en.py:20` hard-code 400 rows, three seeds, 120 updates, 48 tests/review/UI facts; chỉ phù hợp v3 hiện tại, dễ tạo báo cáo sai cho protocol mới hoặc stdev lỗi với một seed. Derive counts/versions/status từ evidence, validate duplicates/missing runs, handle sample size. Không kết luận report v3 hiện sai các giá trị này. |
+| G03 | Docs stale/ambiguous | ROADMAP đoạn preparation/current boundary, spec future list/M3 acquisition state, First Implementation Milestone “Current” và Ground Truth có câu chưa phân biệt AI pilot/human benchmark. Mark dated history và update current state, giữ raw evidence. Annotation protocol cross-language schema không trực tiếp map sang within-language CorpusRecord. |
+| G04 | Scientific/benchmark gap | Shared templates, single-reference exact/CER, chưa action fidelity/preservation/accepted variants/OOD/naturalness, chỉ ba seeds và chưa measured matched FLOPs. Các gaps đã được nhiều docs công bố, không phải proof thuật toán sai. Engineering có thể dùng AI-reviewed task hẹp/new frozen protocol; human/scientific claims vẫn cần review riêng. |
+| G05 | Data/external gates | PhoMT pending sources không phải approved action corpus; original pilot không phải PhoMT-trained. Chăm không có quyền/dataset/language validation. User cho AI Vi–En preliminary, không yêu cầu giả human validation. Hướng dẫn ở product-audit đòi human review cho scientific language-quality pass áp dụng scientific track, không phủ định quyền engineering AI pilot. |
+
+Các threshold 90% single/80% paths và 100% accepted Unicode trong prompt là **mục tiêu nghiệm thu kỹ thuật mới được đề xuất rõ trong prompt**, không phải tiêu chuẩn khoa học, không phải kết quả đã có. Cần predeclare trước tuning và giữ negative results; không hạ threshold sau test để đóng goal. Một rule/refusal fallback có nhãn không thay thế việc neural model đạt contract đã chọn.
+
+## Phạm vi đã rà soát và giới hạn
+
+Đã đọc toàn bộ 13 Python files trong `tide_jepa/` (kể cả `__init__` không có logic), demo HTML, năm test modules, hai scripts, requirements/Git-ignore/AGENTS; active README/ROADMAP/spec/pilot/results/annotation và vault Ground Truth/workflow/milestone liên quan. Research notes được đối chiếu trạng thái/claim, không xác minh lại toàn bộ nguồn literature, website hackathon hay legal terms trên web; chúng không được dùng để đưa claim mới trong audit. Quyền PhoMT lấy từ bàn giao và note, không đưa email cá nhân vào report.
+
+Đây là rà soát rộng với lỗi đã tái hiện/đọc code và danh sách gap rõ; **không bảo đảm đã chứng minh không còn bất kỳ lỗi nào**. Không fuzz exhaustive, không clean-environment install, không CUDA/GPU test, không human semantic review, không đánh giá nội dung PhoMT, không thực nghiệm cải thiện learning hoặc neural generalization trong lượt này. Chat Luna sửa phải tiếp tục tìm và đóng lỗi liên quan, không xem danh sách hiện tại là mọi lỗi có thể có.
+
+Source files/test files/project state cũ được giữ nguyên. Chỉ tạo audit artifacts và prompt. Không đào tạo PhoMT, không dùng Chăm, không release datasets/weights, không tạo goal tại chat hiện tại theo clarification của người dùng.

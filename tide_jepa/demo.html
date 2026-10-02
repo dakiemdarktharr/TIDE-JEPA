@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="vi">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>TIDE-JEPA · Pilot Anh–Việt</title>
+<style>
+:root{color-scheme:light;--ink:#153551;--blue:#306aac;--paper:#edf3fb;--white:#fbfcfe;--muted:#576d81;--line:#c6d5e7;--alert:#73541c}
+*{box-sizing:border-box}body{margin:0;background:var(--paper);color:var(--ink);font-family:"Segoe UI",sans-serif;line-height:1.6}
+main{max-width:1120px;margin:0 auto;padding:44px 32px 28px}header{display:flex;justify-content:space-between;align-items:baseline;border-bottom:2px solid var(--ink);padding-bottom:16px}h1{font-family:Georgia,serif;font-weight:400;font-size:46px;line-height:1;margin:0}header p{margin:0;color:var(--muted)}.intro{max-width:720px;margin:30px 0 26px;font-size:19px}.notice{padding:14px 18px;background:#e2ebf6;border-left:4px solid var(--blue);font-size:14px;max-width:920px;margin-bottom:30px}.workspace{display:grid;grid-template-columns:1fr 1fr;gap:40px}h2{font-size:21px;font-weight:600;margin:0 0 18px}label{display:block;font-size:14px;font-weight:600;margin-bottom:8px}textarea,select,button{font:inherit}textarea{width:100%;min-height:164px;padding:16px;background:var(--white);border:1px solid var(--line);border-radius:5px;resize:vertical;color:var(--ink);font-size:17px}select{width:100%;padding:10px;background:var(--white);border:1px solid var(--line);border-radius:4px;color:var(--ink)}.controls{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:18px}.full{grid-column:1/-1}button{border:0;background:var(--blue);color:white;padding:13px 24px;border-radius:5px;font-weight:600;margin-top:24px;cursor:pointer}button:disabled{opacity:.6;cursor:wait}button:hover:not(:disabled){background:#24578f}:focus-visible{outline:3px solid #c5892e;outline-offset:3px}.hint{color:var(--muted);font-size:13px;margin:8px 0}.output{min-height:260px;border-top:4px solid var(--blue);background:var(--white);padding:22px;font-size:24px;white-space:pre-wrap;overflow-wrap:anywhere}.status{font-size:14px;color:var(--muted);min-height:26px;margin-top:14px}.error{color:var(--alert)}footer{font-size:13px;color:var(--muted);margin-top:40px;padding-top:18px;border-top:1px solid var(--line)}
+@media(max-width:720px){main{padding:26px 20px}header{display:block}header p{margin-top:12px}h1{font-size:38px}.workspace{grid-template-columns:1fr;gap:32px}.intro{font-size:17px}.output{font-size:21px;min-height:150px}}
+</style>
+<main>
+<header><h1>TIDE-JEPA</h1><p>Pilot sơ bộ Anh–Việt · Chạy trên máy</p></header>
+<p class="intro">Thử thay đổi thời điểm hoặc sắc thái khẳng định của một câu, rồi xem mô hình tạo câu đích.</p>
+<div class="notice"><strong>Chế độ chẩn đoán — v4.2 không đạt cổng chất lượng đã định trước.</strong> 0/2.592 đầu ra khớp một câu tham chiếu được chấp nhận và 0 trường hợp bảo toàn nghĩa; cổng chất lượng thất bại. 2.592/2.592 đầu ra hợp lệ Unicode và kết thúc EOS, nhưng điều đó không chứng minh câu có nghĩa hoặc tự nhiên. Đây là pilot AI soạn/AI duyệt sơ bộ, chưa được con người xác thực. Không dùng kết quả như câu đáng tin cậy, bản dịch hay nội dung đã kiểm chứng. Phan Rang Cham chưa được bật.</div>
+<div class="workspace">
+<form id="form">
+<h2>Câu và yêu cầu</h2>
+<label for="source">Câu nguồn</label>
+<textarea id="source" required>Bây giờ Lan đọc một quyển sách.</textarea>
+<p class="hint">Pilot chỉ hỗ trợ biến đổi trong cùng một ngôn ngữ; không hỗ trợ dịch.</p>
+<div class="controls">
+<div><label for="source-language">Ngôn ngữ nguồn</label><select id="source-language"><option value="vi" selected>Tiếng Việt</option><option value="en">English</option></select></div>
+<div><label for="language">Ngôn ngữ đích</label><select id="language"><option value="vi" selected>Tiếng Việt</option><option value="en">English</option></select></div>
+<div><label for="first">Thay đổi thứ nhất</label><select id="first"><option value="TIME:PAST">Về hôm qua</option><option value="TIME:NOW">Về bây giờ</option><option value="POLARITY:NEGATIVE">Phủ định</option><option value="POLARITY:POSITIVE">Khẳng định</option></select></div>
+<div><label for="second">Thay đổi tiếp theo</label><select id="second"><option value="">Không thêm</option><option value="POLARITY:NEGATIVE">Phủ định</option><option value="POLARITY:POSITIVE">Khẳng định</option><option value="TIME:PAST">Về hôm qua</option><option value="TIME:NOW">Về bây giờ</option></select></div>
+</div>
+<button id="submit" type="submit">Tạo câu</button>
+</form>
+<section aria-labelledby="result-title"><h2 id="result-title">Đầu ra chẩn đoán</h2><p id="submitted" class="hint" aria-live="polite">Chưa gửi yêu cầu.</p><div class="output" id="output" aria-live="polite">Đầu ra chưa được xác nhận là câu dùng được.</div><p id="status" class="status" role="status"></p><p class="hint">Demo không tự xác nhận nghĩa, yêu cầu hành động hoặc tính tự nhiên.</p></section>
+</div>
+<footer><span id="checkpoint">Đang đọc thông tin checkpoint…</span> Dữ liệu nhập và đầu ra không được lưu hay gửi lên dịch vụ ngoài. Kết quả pilot được lưu riêng; demo không dùng tập test để tinh chỉnh mô hình.</footer>
+</main>
+<script>
+const form=document.querySelector('#form'),button=document.querySelector('#submit'),output=document.querySelector('#output'),status=document.querySelector('#status'),submitted=document.querySelector('#submitted'),controls=[...form.querySelectorAll('textarea,select')];
+fetch('/health').then(response=>response.json()).then(data=>{document.getElementById('checkpoint').textContent=`Checkpoint: ${data.mode}, seed ${data.seed}.`}).catch(()=>{document.getElementById('checkpoint').textContent='Không đọc được thông tin checkpoint.'});
+form.addEventListener('submit',async event=>{event.preventDefault();button.disabled=true;controls.forEach(control=>control.disabled=true);output.textContent='Đang xử lý ở chế độ chẩn đoán…';status.className='status';status.textContent='Đầu ra chưa đạt nghiệm thu chất lượng.';try{const actions=['first','second'].map(id=>document.getElementById(id).value).filter(Boolean).map(value=>{const[kind,valuePart]=value.split(':');return{kind,value:valuePart}});const request={source:document.getElementById('source').value,source_language:document.getElementById('source-language').value,target_language:document.getElementById('language').value,actions,max_new_tokens:160};submitted.textContent=`Đã gửi: ${request.source_language} → ${request.target_language}; ${actions.map(a=>a.kind+':'+a.value).join(' → ')}; nguồn: ${request.source}`;const response=await fetch('/generate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(request)});const data=await response.json();if(!response.ok)throw new Error(data.error||'Không tạo được câu.');output.textContent=data.generated_text||'(Mô hình trả về câu trống.)';status.textContent=data.valid_utf8?'Đầu ra chỉ phục vụ chẩn đoán; ngữ nghĩa và độ tự nhiên chưa được xác nhận.':'Đầu ra có UTF-8 không hợp lệ; chỉ phục vụ chẩn đoán.'}catch(error){status.className='status error';status.textContent=error.message}finally{controls.forEach(control=>control.disabled=false);button.disabled=false}});
+</script>
+</html>
