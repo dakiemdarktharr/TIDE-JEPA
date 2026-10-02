@@ -1,9 +1,9 @@
 # Project Ground Truth
 
 > Raw: [[../raw/Conversation Decisions]], [[../raw/Workspace Snapshot]], [[../raw/PhoMT Permission Confirmation — 2026-10-01]], [[../raw/PhoMT Intake and Vi-En Pilot — 2026-10-01]]
-> Fingerprint: uncommitted workspace snapshot with PhoMT M4 intake and v4.2 pilot results, 2026-10-02 (no Git commit exists yet)
+> Fingerprint: GitHub source snapshot `ed4f65c4f0c8268487a2afdd0d69fa7c2812a962` on `master`; latest status update is recorded in Git after this source snapshot.
 > Monitored: `ROADMAP.md`, `tide_jepa_spec.md`, `README.md`, `tide_jepa/**`, `tests/**`, `Obsidian/RMIT Hackathon/**`
-> Status: M1–M3 implemented; 58/58 CPU tests pass. PhoMT archive is locally hash-verified and metadata-audited; 160 private pending source packets exist, with no PhoMT training. The frozen v4.2 AI-reviewed synthetic Vi–En pilot completed 12 runs and an offline demo, but failed its preregistered generation quality gate (0/2,592 accepted-reference matches). Human-validated M4 remains open; Cham is deferred pending source-use permission and linguistic review. Current evidence: [results](../../../VI_EN_RESULTS.md) and [history](../../../VI_EN_RESULTS_HISTORY.md). Event facts below retain their historical verification dates and were not rechecked this session.
+> Status: M1–M3 implemented; 69/69 CPU tests passed after v4.8 changes. PhoMT archive is locally hash-verified and metadata-audited; 160 private pending source packets exist, with no PhoMT training. v4.8 training was stopped at the user's request: four/12 configurations complete, four partial, four not started; no validation result exists and the release holdout is sealed. v4.7 and earlier quality failures remain preserved. Human-validated M4 remains open; Cham is deferred pending source-use permission and linguistic review. Current evidence: [v4.8 status](../../../VI_EN_RESULTS_V4.8_STATUS.md), [results](../../../VI_EN_RESULTS.md) and [history](../../../VI_EN_RESULTS_HISTORY.md). Event facts below retain their historical verification dates and were not rechecked this session.
 
 ## Goal
 

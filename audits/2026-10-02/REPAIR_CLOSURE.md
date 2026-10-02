@@ -1,6 +1,6 @@
 # 2026-10-02 audit repair closure
 
-Status: active engineering closure record. Findings are traced to regression coverage and probe evidence; this does not assert that untested bugs cannot exist. The current suite runs on Python 3.11.9 with PyTorch 2.14.0+cpu; `compileall`, 60 unit tests, and `pip check` passed after the v4.3 authoring/gate changes. Root probes should be rerun after the final code changes and recorded below.
+Status: active engineering closure record. Findings are traced to regression coverage and probe evidence; this does not assert that untested bugs cannot exist. The current project-local runtime on Windows is Python 3.11.9 with PyTorch 2.14.0+cpu; after v4.8 implementation changes, 69 unit tests passed with 0 skipped, plus compile and dependency checks. A v4.8 CPU training run was stopped at the user's request before all configurations completed. See [the aggregate-only v4.8 status](../../VI_EN_RESULTS_V4.8_STATUS.md). No v4.8 validation result exists; Q01 remains open and blocks goal completion.
 
 | ID | Closure evidence | Status |
 |---|---|---|
@@ -18,7 +18,7 @@ Status: active engineering closure record. Findings are traced to regression cov
 | E12 | Loopback demo bounds request body, socket read, action depth and generation budget, validates Host/Origin and suppresses request text from logs; `test_local_demo_reports_actual_model_and_rejects_invalid_requests`. | Closed for covered request paths |
 | E13 | Inference declares source and target language and rejects cross-language requests; `test_train_resume_generate_and_identity_guard`. | Closed |
 | E14 | Demo request snapshot, disabled form controls, and explicit status/error presentation are covered by UI implementation; full interactive browser automation remains unverified in the current desktop task. | Partially closed; browser behavior requires a fresh UI integration check |
-| Q01 | v3 and v4.1/v4.2 quality failures are preserved. v4.3 uses a fresh AI-reviewed compositional synthetic split, a new decoder/evaluator identity, validation-only model selection, and an untouched release holdout. The required semantic thresholds are not yet demonstrated. | Open; blocks goal completion |
+| Q01 | v3 and v4.1–v4.7 quality failures are preserved. v4.8 has a fresh AI-reviewed compositional synthetic split and untouched release holdout, but training stopped after four complete and four partial runs; validation has not run. The required semantic thresholds are not demonstrated. | Open; blocks goal completion |
 | G01 | Python 3.11.9 / PyTorch 2.14.0+cpu, compileall, unit suite, and pip consistency were checked; clean-machine bootstrap and venv launcher reliability remain out of scope. | Partially closed |
 | G02 | `scripts/summarize_vi_en.py` validates registered runs and derives version, split sizes, mode, seed count, CE and gate from evidence; it emits aggregate metrics only. | Closed for current report contract |
 | G03 | README, ROADMAP, spec, pilot guide, current results, history, Ground Truth and vault index now distinguish preliminary AI evidence, failed quality gates, and human/external gates. Historical raw notes remain unchanged. | Closed for current state |
@@ -30,6 +30,7 @@ Status: active engineering closure record. Findings are traced to regression cov
 - v3: 0/864 exact matches; 564/864 valid UTF-8. Preserve as immutable historical evidence.
 - v4.1: 0 accepted-reference matches and 0 preservation passes on its opened development holdout; no retuning against it.
 - v4.2: 12 fixed runs, 0/2,592 accepted-reference matches and 0 preservation passes; all outputs Unicode-valid and EOS-terminated, but semantic quality gate failed. Preserve and do not tune against its opened holdout.
-- v4.3: fresh compositional benchmark, independently AI-reviewed for preliminary use. Release holdout remains closed until all training and validation selection finish. A failed validation gate requires another new version and holdout; the threshold must not be lowered.
+- v4.7: validation failed because some single-action preservation buckets fell below 90%; do not use its opened development evidence as a new test.
+- v4.8: training paused by user request. Four/12 configurations completed, four partial, four not started. Validation and release-holdout evaluation have not run. See `VI_EN_RESULTS_V4.8_STATUS.md` for local checkpoint hashes and frozen artifact hashes.
 
 All data-generation, review, training and evaluation rows stay under Git-ignored `data/` or `runs/`. This closure note includes only aggregate status and test names.

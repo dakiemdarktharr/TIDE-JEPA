@@ -1,12 +1,18 @@
 # TIDE-JEPA preliminary English–Vietnamese pilot
 
-The user authorized AI authoring and review on 2026-10-01, with human review deferred. The current v4.2 frozen engineering pilot completes controlled synthetic-data authoring, four objective controls, held-out evaluation and offline inference, but its preregistered generation quality gate **failed**. It does not establish language quality or complete the human-validated M4 benchmark. See the [aggregate results](VI_EN_RESULTS.md) and [historical version results](VI_EN_RESULTS_HISTORY.md).
+The user authorized AI authoring and review on 2026-10-01, with human review deferred. The latest version is v4.8, frozen as a preliminary synthetic pilot and paused during training. Four of 12 configurations completed, four are partial and four have not started; validation has not run, and the release holdout remains sealed. See the [v4.8 status](VI_EN_RESULTS_V4.8_STATUS.md), [aggregate results](VI_EN_RESULTS.md) and [historical version results](VI_EN_RESULTS_HISTORY.md). Earlier v4.7 and v4.2 quality gates failed; none establishes human-validated language quality or completes the scientific M4 benchmark.
 
 Phan Rang Cham stays out of the pilot until source-use permission and language review are available. New agents/subagents use only `gpt-6-luna` with `high` or `xhigh`, unless the user approves another model; see [AGENTS.md](AGENTS.md).
 
 ## Data and review
 
-### Current frozen v4.2
+### Current paused v4.8
+
+The local frozen version is `data/pilot/vi-en-ai-v4.8`, with 7,680 AI-authored synthetic records in 192 combinations and 112/40/40 train/validation/release-holdout groups. Two independent AI reviews and an AI adjudication are recorded for preliminary use; this is not human or native-speaker validation. The frozen protocol specifies four controls, seeds 17/23/41, 58 epochs, width 48, four heads, two layers, max length 192, batch 80, learning rate 0.001 and source-copy weight 0.5.
+
+At the user's request, the training runner and workers were stopped after seed 17 completed all four controls and seed 23 partially trained four controls. Seed 41 did not start. No suite report or evaluation exists for v4.8; its release holdout remains sealed. The data and checkpoint files are Git-ignored and were not pushed. See the [aggregate-only v4.8 status and local checkpoint hashes](VI_EN_RESULTS_V4.8_STATUS.md).
+
+### Historical frozen v4.2
 
 The current release candidate is `data/pilot/vi-en-ai-v4.2`: 1,280 AI-authored synthetic records across 32 event families, with 20/6/6 families and records split as 800/240/240 train/validation/release holdout. Its 28 abstract templates are shared across partitions. The two independent AI reviewers approved the draft for preliminary use; this is not human or native-speaker validation. The held-out set was evaluated once after all training completed. It produced 0/2,592 accepted-reference matches and 0 preservation passes; all outputs were valid Unicode and EOS-terminated. The frozen quality gate failed. Do not tune against this opened holdout. Any new experiment needs a new reviewed version and untouched holdout.
 

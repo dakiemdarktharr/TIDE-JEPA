@@ -1,6 +1,6 @@
 # Historical preliminary Vi–En pilot results
 
-This file preserves earlier AI-authored/AI-reviewed synthetic pilot results after the active summary moved to v4.2. All results are preliminary; none were human/native-speaker validated. PhoMT was not used for model training, and Phan Rang Cham remains excluded.
+This file preserves earlier AI-authored/AI-reviewed synthetic pilot results. All results are preliminary; none were human/native-speaker validated. PhoMT was not used for model training, and Phan Rang Cham remains excluded. The latest v4.8 training pause is summarized in [VI_EN_RESULTS_V4.8_STATUS.md](VI_EN_RESULTS_V4.8_STATUS.md); it has no evaluation result.
 
 ## v3 baseline
 
@@ -23,6 +23,10 @@ The v4.1 fresh synthetic corpus contained 800 records in 20 families. All 12 fix
 
 The full aggregate report is preserved in [VI_EN_RESULTS_V4.2.md](VI_EN_RESULTS_V4.2.md). It records the 12-run table and per-language/action buckets: 0/2,592 accepted-reference matches, 0 preservation passes, and 2,592/2,592 valid Unicode and EOS-terminated outputs. The frozen gate failed.
 
-## Current result
+## v4.7 validation
 
-The newer v4.2 experiment uses a fresh corpus and holdout, a source-memory cross-attention decoder and UTF-8-constrained decoding. The complete aggregate results and frozen quality-gate status are in [VI_EN_RESULTS.md](VI_EN_RESULTS.md). v4.2 also failed its preregistered generation quality gate; its negative result is preserved and must not be tuned against.
+The v4.7 validation report is preserved in [VI_EN_RESULTS_V4.7_VALIDATION.md](VI_EN_RESULTS_V4.7_VALIDATION.md). The frozen quality gate failed because several single-action preservation buckets were below 90%. The test set was not opened to tune the version.
+
+## Latest experiment status
+
+v4.8 uses a new AI-reviewed synthetic corpus and a new sealed release holdout. Training is paused partway through; no v4.8 validation or release evaluation has been run. Earlier v4.2 aggregate results remain in [VI_EN_RESULTS.md](VI_EN_RESULTS.md), and that version failed its preregistered generation quality gate. Do not retune against an opened holdout.

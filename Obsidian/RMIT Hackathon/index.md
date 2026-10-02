@@ -9,8 +9,9 @@ This folder is an Obsidian-compatible, project-local knowledge vault. Open this 
 - [[wiki/Dataset Research — 2026-09-30]] — current corpus decision, PhoMT conditional permission, mandatory paper citation/release checklist, and intake status. The 2026-09-28 page is historical research context.
 - [[wiki/First Implementation Milestone]] — data-agnostic TIDE-JEPA prototype, independent review, and verification limits.
 - [[experiments/index]] — completed AI-reviewed synthetic Vi–En preliminary pilot and future human-validated experiments.
-- [VI_EN_RESULTS.md](../../VI_EN_RESULTS.md) — frozen v4.2 aggregate evaluation; preregistered generation gate failed.
-- [VI_EN_RESULTS_HISTORY.md](../../VI_EN_RESULTS_HISTORY.md) — preserved v3 and v4.1 negative results.
+- [VI_EN_RESULTS.md](../../VI_EN_RESULTS.md) — current v4.8 paused-training status and preserved historical v4.2 aggregate evaluation.
+- [VI_EN_RESULTS_V4.8_STATUS.md](../../VI_EN_RESULTS_V4.8_STATUS.md) — aggregate-only training/checkpoint and frozen artifact hashes; no dataset rows.
+- [VI_EN_RESULTS_HISTORY.md](../../VI_EN_RESULTS_HISTORY.md) — preserved earlier quality-gate results, including v4.7.
 - [[wiki/Agentic Workflow]] — orchestrator, heavy, review, and find responsibilities and handoffs.
 - [[wiki/Worker Prompt Pack]] — reusable role prompts and prompt-injection boundaries.
 - [[log]] — append-only change history.

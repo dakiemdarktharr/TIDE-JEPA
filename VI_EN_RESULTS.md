@@ -2,7 +2,11 @@
 
 This is an AI-authored and AI-reviewed synthetic pilot. **It is preliminary and has not been human/native-speaker validated.** PhoMT was not used for training; Phan Rang Cham is excluded.
 
-## Frozen vi-en-ai-v4.2 evaluation
+## Current status: v4.8 training paused
+
+The v4.8 synthetic pilot was frozen with a fresh split and release holdout. Training was stopped at the user's request after four of 12 configurations completed and four were partial. Four configurations have not started. No validation evaluation or `suite_report.json` exists; the release holdout remains sealed. The dataset, review records, protocol and model checkpoints remain local under Git-ignored `data/` and `runs/`. See the [aggregate-only status note with checkpoint hashes](VI_EN_RESULTS_V4.8_STATUS.md). v4.8 has no quality result yet.
+
+## Historical frozen vi-en-ai-v4.2 evaluation
 
 The corpus contains 1280 records across 32 meaning frames (20/6/6 train/validation/release-holdout groups; 800/240/240 records). Split scope: 20 train, 6 validation, 6 release-holdout event families, fixed before model selection; fresh families not used in prior versions. The release holdout was opened once after all 12 preregistered configurations completed training; these results were not used for tuning.
 
