@@ -10,7 +10,11 @@ This folder is an Obsidian-compatible, project-local knowledge vault. Open this 
 - [[wiki/First Implementation Milestone]] — data-agnostic TIDE-JEPA prototype, independent review, and verification limits.
 - [[experiments/index]] — completed AI-reviewed synthetic Vi–En preliminary pilot and future human-validated experiments.
 - [VI_EN_RESULTS.md](../../VI_EN_RESULTS.md) — current v4.8 paused-training status and preserved historical v4.2 aggregate evaluation.
+- [v4.10 status](../../VI_EN_RESULTS_V4.10_STATUS.md) — frozen private synthetic protocol with two independent Luna approvals; 12/12 training and validation complete, TIDE preservation gate failed and holdout remains sealed. See the [validation report](../../VI_EN_RESULTS_V4.10_VALIDATION.md). v4.9 was superseded before training.
+- v4.11 — private synthetic corpus frozen after two independent Luna reviews; training is next and the fresh holdout remains sealed. See [frozen status](../../VI_EN_RESULTS_V4.11_STATUS.md) and the [Linux revalidation report](../../audits/2026-10-03/LINUX_REVALIDATION.md).
 - [VI_EN_RESULTS_V4.8_STATUS.md](../../VI_EN_RESULTS_V4.8_STATUS.md) — aggregate-only training/checkpoint and frozen artifact hashes; no dataset rows.
+- [VI_EN_RESULTS_V4.9_STATUS.md](../../VI_EN_RESULTS_V4.9_STATUS.md) — fresh AI-reviewed protocol; training not started, release gate still sealed.
+- [Linux revalidation — 2026-10-03](../../audits/2026-10-03/LINUX_REVALIDATION.md) — current runtime, 72-test result, audit matrix, and v4.8 artifact-transfer gate.
 - [VI_EN_RESULTS_HISTORY.md](../../VI_EN_RESULTS_HISTORY.md) — preserved earlier quality-gate results, including v4.7.
 - [[wiki/Agentic Workflow]] — orchestrator, heavy, review, and find responsibilities and handoffs.
 - [[wiki/Worker Prompt Pack]] — reusable role prompts and prompt-injection boundaries.

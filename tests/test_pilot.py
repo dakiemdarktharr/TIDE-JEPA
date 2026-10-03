@@ -13,7 +13,8 @@ import zipfile
 from tide_jepa.phomt_intake import TRAIN_MEMBERS, _select_pairs
 from tide_jepa.data import dataset_fingerprint, read_jsonl
 from tide_jepa.pilot_seed import (FAMILIES_V43, FAMILIES_V44, FAMILIES_V45,
-                                  FAMILIES_V46, FAMILIES_V47, FAMILIES_V48, author_seed,
+                                  FAMILIES_V46, FAMILIES_V47, FAMILIES_V48,
+                                  FAMILIES_V49, FAMILIES_V410, FAMILIES_V411, author_seed,
                                   author_seed_v4)
 from tide_jepa.schema import Action, Inventory
 
@@ -314,6 +315,151 @@ class SeedAuthoringTests(unittest.TestCase):
                              {"train": 112, "validation": 40, "test": 40})
             self.assertFalse(statement["human_validated"])
 
+    def test_v49_uses_fresh_agents_and_train_covered_holdout_pairs(self):
+        train, validation, test = (FAMILIES_V49[name]
+                                   for name in ("train", "validation", "test"))
+        self.assertEqual((len(train), len(validation), len(test)), (112, 40, 40))
+        self.assertTrue(all(row[0].startswith("compose49_") for row in train + validation + test))
+        self.assertEqual({row[1] for row in train + validation + test}, {"Kieu", "Thien", "Oanh"})
+
+        def factor_pairs(families):
+            triples = [tuple(map(int, row[0].removeprefix("compose49_").split("_")))
+                       for row in families]
+            return ({(agent, verb) for agent, verb, _ in triples},
+                    {(agent, patient) for agent, _, patient in triples},
+                    {(verb, patient) for _, verb, patient in triples})
+
+        train_pairs = factor_pairs(train)
+        for held_out in (validation, test):
+            for observed, covered in zip(factor_pairs(held_out), train_pairs):
+                self.assertLessEqual(observed, covered)
+        with tempfile.TemporaryDirectory() as temporary:
+            destination = Path(temporary) / "v4.9"
+            statement = author_seed_v4(destination, version="v4.9")
+            inventory_value = json.loads((destination / "inventory.draft.json").read_text(encoding="utf-8"))
+            actions = tuple(Action(**value) for value in inventory_value["actions"])
+            inventory = Inventory(actions, {
+                language: frozenset(Action(**value) for value in inventory_value["proposed_by_language"][language])
+                for language in ("en", "vi")
+            })
+            rows = read_jsonl(destination / "corpus.draft.jsonl", inventory,
+                              languages=("en", "vi"), require_approved=False)
+            groups = json.loads((destination / "groups.json").read_text(encoding="utf-8"))
+            frames = json.loads((destination / "semantic_frames.draft.json").read_text(encoding="utf-8"))
+            from tide_jepa.pilot import _semantic_frame_flags
+            self.assertEqual(len(rows), 7680)
+            self.assertTrue(all((lambda flags: flags and flags["action_fidelity"] and flags["preservation"])(
+                                _semantic_frame_flags(row.target_text, row.language,
+                                                      frames[row.target_frame_id]))
+                                for row in rows))
+            self.assertEqual(statement["draft_sha256"], dataset_fingerprint(rows))
+            self.assertEqual({name: list(groups.values()).count(name)
+                              for name in ("train", "validation", "test")},
+                             {"train": 112, "validation": 40, "test": 40})
+            self.assertFalse(statement["human_validated"])
+
+    def test_v410_holdout_is_fresh_and_pairs_are_train_covered(self):
+        train, validation, test = (FAMILIES_V410[name]
+                                   for name in ("train", "validation", "test"))
+        self.assertEqual((len(train), len(validation), len(test)), (112, 40, 40))
+        self.assertTrue(all(row[0].startswith("compose410_") for row in train + validation + test))
+        self.assertEqual({row[1] for row in train + validation + test}, {"Nhu", "Tuyen", "Loc"})
+
+        def triples(families, prefix):
+            return {tuple(map(int, row[0].removeprefix(prefix).split("_"))) for row in families}
+
+        prior_v49 = triples(sum(FAMILIES_V49.values(), []), "compose49_")
+        current_v410 = triples(train + validation + test, "compose410_")
+        self.assertFalse(prior_v49 & current_v410)
+
+        def factor_pairs(families):
+            triples = [tuple(map(int, row[0].removeprefix("compose410_").split("_")))
+                       for row in families]
+            return ({(agent, verb) for agent, verb, _ in triples},
+                    {(agent, patient) for agent, _, patient in triples},
+                    {(verb, patient) for _, verb, patient in triples})
+
+        train_pairs = factor_pairs(train)
+        for held_out in (validation, test):
+            for observed, covered in zip(factor_pairs(held_out), train_pairs):
+                self.assertLessEqual(observed, covered)
+        with tempfile.TemporaryDirectory() as temporary:
+            destination = Path(temporary) / "v4.10"
+            statement = author_seed_v4(destination, version="v4.10")
+            inventory_value = json.loads((destination / "inventory.draft.json").read_text(encoding="utf-8"))
+            actions = tuple(Action(**value) for value in inventory_value["actions"])
+            inventory = Inventory(actions, {
+                language: frozenset(Action(**value) for value in inventory_value["proposed_by_language"][language])
+                for language in ("en", "vi")
+            })
+            rows = read_jsonl(destination / "corpus.draft.jsonl", inventory,
+                              languages=("en", "vi"), require_approved=False)
+            groups = json.loads((destination / "groups.json").read_text(encoding="utf-8"))
+            frames = json.loads((destination / "semantic_frames.draft.json").read_text(encoding="utf-8"))
+            from tide_jepa.pilot import _semantic_frame_flags
+            self.assertEqual(len(rows), 7680)
+            self.assertTrue(all((lambda flags: flags and flags["action_fidelity"] and flags["preservation"])(
+                                _semantic_frame_flags(row.target_text, row.language,
+                                                      frames[row.target_frame_id]))
+                                for row in rows))
+            self.assertEqual(statement["draft_sha256"], dataset_fingerprint(rows))
+            self.assertEqual({name: list(groups.values()).count(name)
+                              for name in ("train", "validation", "test")},
+                             {"train": 112, "validation": 40, "test": 40})
+            self.assertFalse(statement["human_validated"])
+
+    def test_v411_holdout_is_fresh_and_copy_focused_draft_is_valid(self):
+        train, validation, test = (FAMILIES_V411[name]
+                                   for name in ("train", "validation", "test"))
+        self.assertEqual((len(train), len(validation), len(test)), (112, 40, 40))
+        all_rows = train + validation + test
+        self.assertTrue(all(row[0].startswith("compose411_") for row in all_rows))
+        self.assertEqual({row[1] for row in all_rows}, {"Kha My", "Tuan Kiet", "An Vy"})
+
+        def triples(families, prefix):
+            return {tuple(map(int, row[0].removeprefix(prefix).split("_"))) for row in families}
+
+        current = triples(all_rows, "compose411_")
+        prior_v49 = triples(sum(FAMILIES_V49.values(), []), "compose49_")
+        prior_v410 = triples(sum(FAMILIES_V410.values(), []), "compose410_")
+        self.assertFalse(current & prior_v49)
+        self.assertFalse(current & prior_v410)
+
+        def factor_pairs(families):
+            values = [tuple(map(int, row[0].removeprefix("compose411_").split("_")))
+                      for row in families]
+            return ({(agent, verb) for agent, verb, _ in values},
+                    {(agent, patient) for agent, _, patient in values},
+                    {(verb, patient) for _, verb, patient in values})
+
+        train_pairs = factor_pairs(train)
+        for held_out in (validation, test):
+            for observed, covered in zip(factor_pairs(held_out), train_pairs):
+                self.assertLessEqual(observed, covered)
+
+        with tempfile.TemporaryDirectory() as temporary:
+            destination = Path(temporary) / "v4.11"
+            statement = author_seed_v4(destination, version="v4.11")
+            inventory_value = json.loads((destination / "inventory.draft.json").read_text(encoding="utf-8"))
+            actions = tuple(Action(**value) for value in inventory_value["actions"])
+            inventory = Inventory(actions, {
+                language: frozenset(Action(**value) for value in inventory_value["proposed_by_language"][language])
+                for language in ("en", "vi")
+            })
+            rows = read_jsonl(destination / "corpus.draft.jsonl", inventory,
+                              languages=("en", "vi"), require_approved=False)
+            groups = json.loads((destination / "groups.json").read_text(encoding="utf-8"))
+            frames = json.loads((destination / "semantic_frames.draft.json").read_text(encoding="utf-8"))
+            from tide_jepa.pilot import _semantic_frame_flags
+            self.assertEqual(len(rows), 7680)
+            self.assertTrue(all((lambda flags: flags and flags["action_fidelity"] and flags["preservation"])(
+                                _semantic_frame_flags(row.target_text, row.language,
+                                                      frames[row.target_frame_id]))
+                                for row in rows))
+            self.assertEqual(statement["draft_sha256"], dataset_fingerprint(rows))
+            self.assertFalse(statement["human_validated"])
+            self.assertFalse(statement["phomt_used"])
+
     def test_v42_seed_has_unique_alignments_and_frozen_group_counts(self):
         with tempfile.TemporaryDirectory() as temporary:
             destination = Path(temporary) / "v4.2"
@@ -343,6 +489,31 @@ class SeedAuthoringTests(unittest.TestCase):
 
 
 class DemoAPITests(unittest.TestCase):
+    @unittest.skipUnless(TORCH_AVAILABLE, "PyTorch is required for offline inference")
+    def test_inference_rejects_malformed_actions_before_model_work(self):
+        from types import SimpleNamespace
+        from tide_jepa.infer import OfflineGenerator
+
+        generator = OfflineGenerator.__new__(OfflineGenerator)
+        generator.cfg = SimpleNamespace(languages=("en", "vi"))
+        generator.inventory = SimpleNamespace(
+            require=lambda *_: self.fail("malformed action reached inventory lookup"))
+        request = {"source": "Original synthetic source.", "source_language": "en",
+                   "target_language": "en"}
+        for actions in (None, 4, True, "TIME:PAST", {}, []):
+            with self.subTest(actions_type=type(actions).__name__):
+                with self.assertRaisesRegex(ValueError, "actions must be a nonempty list"):
+                    generator.generate({**request, "actions": actions})
+        with self.assertRaisesRegex(ValueError, "at most 8"):
+            generator.generate({**request, "actions": [{}] * 9})
+        for action in ({"kind": "TIME"}, {"kind": 4, "value": "PAST"},
+                       {"kind": "TIME", "value": None}):
+            with self.subTest(action=action):
+                with self.assertRaises(ValueError):
+                    generator.generate({**request, "actions": [action]})
+        self.assertFalse(hasattr(generator, "model"))
+        self.assertFalse(hasattr(generator, "tokenizer"))
+
     def test_local_demo_reports_actual_model_and_rejects_invalid_requests(self):
         from http.server import HTTPServer
         from threading import Thread
@@ -357,7 +528,7 @@ class DemoAPITests(unittest.TestCase):
                 if value.get("target_language") not in self.cfg.languages:
                     raise ValueError("language not approved")
                 return {"generated_text": "Original synthetic output.", "valid_utf8": True}
-        server = HTTPServer(("127.0.0.1", 0), make_handler(FakeGenerator(), {"mode": "generic_jepa", "seed": 41, "human_validated": False, "phomt_trained": False}))
+        server = HTTPServer(("127.0.0.1", 0), make_handler(FakeGenerator(), {"mode": "generic_jepa", "seed": 41, "pilot_version": "vi-en-ai-test", "primary_quality_mode": "tide", "validation_gate_status": "control_only", "human_validated": False, "phomt_trained": False}))
         worker = Thread(target=server.serve_forever, daemon=True)
         worker.start()
         url = f"http://127.0.0.1:{server.server_port}"
@@ -365,6 +536,8 @@ class DemoAPITests(unittest.TestCase):
             with urlopen(url + "/health") as response:
                 metadata = json.load(response)
             self.assertEqual((metadata["mode"], metadata["seed"]), ("generic_jepa", 41))
+            self.assertEqual(metadata["quality_status"], "diagnostic_only")
+            self.assertEqual(metadata["validation_gate_status"], "control_only")
             valid = Request(url + "/generate", data=json.dumps({"source_language": "en", "target_language": "en", "actions": [{"kind": "TIME", "value": "PAST"}]}).encode(), headers={"Content-Type": "application/json"})
             with urlopen(valid) as response:
                 self.assertTrue(json.load(response)["valid_utf8"])
@@ -492,6 +665,10 @@ class PilotWorkflowTests(unittest.TestCase):
         output = self.base / "local-run"
         config["output_dir"] = str(output)
         path.write_text(json.dumps(config))
+        protocol_path = self.base / "protocol.json"
+        protocol = json.loads(protocol_path.read_text())
+        protocol["config_files_sha256"][path.name] = hashlib.sha256(path.read_bytes()).hexdigest()
+        protocol_path.write_text(json.dumps(protocol))
         with redirect_stdout(io.StringIO()):
             result = run_experiment(path, device="cpu")
             resumed = run_experiment(path, resume=True, device="cpu")
@@ -580,7 +757,7 @@ class PilotWorkflowTests(unittest.TestCase):
         self.assertEqual(first["steps"], second["steps"])
         self.assertTrue(all(torch.equal(value, second["model"][key]) for key, value in first["model"].items()))
 
-    def test_latest_best_crash_recovers_and_test_evaluation_is_immutable(self):
+    def test_latest_best_crash_recovers_but_release_test_stays_sealed(self):
         from unittest.mock import patch
         import torch
         import tide_jepa.experiment as experiment
@@ -591,6 +768,10 @@ class PilotWorkflowTests(unittest.TestCase):
         output = self.base / "crash-recovery"
         config["output_dir"] = str(output)
         path.write_text(json.dumps(config))
+        protocol_path = self.base / "protocol.json"
+        protocol = json.loads(protocol_path.read_text())
+        protocol["config_files_sha256"][path.name] = hashlib.sha256(path.read_bytes()).hexdigest()
+        protocol_path.write_text(json.dumps(protocol))
         save = experiment._save_checkpoint
         def crash_before_best(destination, state):
             if destination.name == "best.pt":
@@ -603,14 +784,14 @@ class PilotWorkflowTests(unittest.TestCase):
         self.assertFalse((output / "best.pt").exists())
         self.assertEqual(latest["best_epoch"], 1)
         with redirect_stdout(io.StringIO()):
-            first = experiment.run_experiment(path, resume=True, evaluate_test=True, device="cpu")
+            with self.assertRaisesRegex(ValueError, "release holdout remains sealed"):
+                experiment.run_experiment(path, resume=True, evaluate_test=True, device="cpu")
+        from tide_jepa.pilot import evaluate_generation
+        with self.assertRaisesRegex(ValueError, "release holdout remains sealed"):
+            evaluate_generation(path, split="test")
         self.assertTrue((output / "best.pt").is_file())
-        self.assertTrue(first["test_evaluated"])
-        original = (output / "test_metrics.json").read_bytes()
-        with patch.object(experiment, "_evaluate", side_effect=AssertionError("must use immutable cache")):
-            second = experiment.run_experiment(path, resume=True, evaluate_test=True, device="cpu")
-        self.assertTrue(second["test_evaluated"])
-        self.assertEqual((output / "test_metrics.json").read_bytes(), original)
+        self.assertFalse((output / "test_metrics.json").exists())
+        self.assertFalse((output / "generation_metrics.json").exists())
 
     def test_group_batch_preflight_rejects_large_indivisible_group(self):
         from types import SimpleNamespace

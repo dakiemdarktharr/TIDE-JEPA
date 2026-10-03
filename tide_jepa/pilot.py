@@ -103,6 +103,9 @@ def freeze_pilot(directory, *, epochs=40, seeds=(17, 23, 41), model_width=32,
         "v4.6": "tide_jepa/pilot_seed.py:original-ai-authored-v4.6",
         "v4.7": "tide_jepa/pilot_seed.py:original-ai-authored-v4.7",
         "v4.8": "tide_jepa/pilot_seed.py:original-ai-authored-v4.8",
+        "v4.9": "tide_jepa/pilot_seed.py:original-ai-authored-v4.9",
+        "v4.10": "tide_jepa/pilot_seed.py:original-ai-authored-v4.10",
+        "v4.11": "tide_jepa/pilot_seed.py:original-ai-authored-v4.11",
     }.get(version)
     if expected_provenance is None or any(r.provenance_ref != expected_provenance
            or r.license_ref != "original-ai-authored-internal-research; no-PhoMT-content" for r in rows):
@@ -142,7 +145,8 @@ def freeze_pilot(directory, *, epochs=40, seeds=(17, 23, 41), model_width=32,
     groups = _read(base / "groups.json")
     fractions = {name: sum(r.split_group_id in {g for g, s in groups.items() if s == name} for r in rows) / len(rows)
                  for name in ("train", "validation", "test")}
-    manifest = SplitManifest(dataset_fingerprint(approved_rows), 20261001, fractions, groups,
+    split_seed = {"v4.9": 20261008, "v4.10": 20261009, "v4.11": 20261010}.get(version, 20261001)
+    manifest = SplitManifest(dataset_fingerprint(approved_rows), split_seed, fractions, groups,
                              {name: tuple(sorted(r.record_id for r in rows if groups[r.split_group_id] == name))
                               for name in ("train", "validation", "test")})
     approved_inventory = {"actions": draft_inventory["actions"], "approved_by_language": {"en": proposed["en"], "vi": proposed["vi"], "cham_phan_rang": []}}
@@ -210,7 +214,7 @@ def freeze_pilot(directory, *, epochs=40, seeds=(17, 23, 41), model_width=32,
                                      "checkpoint_selection": ("validation token CE + path token CE + weighted aligned-source token CE; same criterion for all modes"
                                                                if source_copy_weight else
                                                                "validation token CE + path token CE; same criterion for all modes"),
-                                     "test_policy": "train all configs before opening test evaluation; no test-based tuning",
+                                     "test_policy": "train every registered config; all primary-seed validation generation gates must pass before opening the sealed release holdout; never tune on test",
                                      "model": {"width": model_width, "heads": model_heads, "layers": model_layers,
                                                "max_length": max_length, "batch_size": batch_size,
                                                "learning_rate": learning_rate},
@@ -268,11 +272,13 @@ def _norm_text(value):
 def _semantic_frame_flags(text, language, frame):
     """Narrow rule checker over the declared synthetic v4 grammar only."""
     from .pilot_seed import (FAMILIES_V4, FAMILIES_V42, FAMILIES_V43, FAMILIES_V44,
-                             FAMILIES_V45, FAMILIES_V46, FAMILIES_V47, FAMILIES_V48)
+                             FAMILIES_V45, FAMILIES_V46, FAMILIES_V47, FAMILIES_V48,
+                             FAMILIES_V49, FAMILIES_V410, FAMILIES_V411)
     event = frame.get("event")
     definition = next((item for family_set in (FAMILIES_V4, FAMILIES_V42, FAMILIES_V43,
                                                FAMILIES_V44, FAMILIES_V45, FAMILIES_V46,
-                                               FAMILIES_V47, FAMILIES_V48)
+                                               FAMILIES_V47, FAMILIES_V48, FAMILIES_V49, FAMILIES_V410,
+                                               FAMILIES_V411)
                        for group in family_set.values() for item in group if item[0] == event), None)
     if definition is None:
         return None
@@ -317,6 +323,99 @@ def _semantic_frame_flags(text, language, frame):
             "checker_scope": "v4 synthetic tense/polarity grammar; event roles and listed surface forms only"}
 
 
+def _require_release_test_gate(base, protocol, manifest, rows):
+    """Keep release-test scoring closed until all registered training and validation gates pass."""
+    from .experiment import _canonical_hash, _implementation_identity
+    import torch
+
+    base = Path(base)
+    config_names = protocol.get("configs", [])
+    modes, seeds = protocol.get("modes", []), protocol.get("seeds", [])
+    primary = protocol.get("primary_quality_mode")
+    if (not config_names or not modes or not seeds or primary not in modes
+            or len(config_names) != len(set(config_names))):
+        raise ValueError("release holdout remains sealed: frozen protocol registration is incomplete")
+    if protocol.get("config_files_sha256") != {
+            name: _hash_file(base / name) for name in config_names}:
+        raise ValueError("release holdout remains sealed: registered config identity changed")
+
+    primary_configs = []
+    for name in config_names:
+        config = _read(base / name)
+        output = (base / config["output_dir"]).resolve()
+        latest_path, best_path = output / "latest.pt", output / "best.pt"
+        resolved_path = output / "resolved_run.json"
+        if not latest_path.is_file() or not best_path.is_file() or not resolved_path.is_file():
+            raise ValueError("release holdout remains sealed: every registered training run must finish first")
+        latest = torch.load(latest_path, map_location="cpu", weights_only=True)
+        best = torch.load(best_path, map_location="cpu", weights_only=True)
+        resolved = _read(resolved_path)
+        if (latest.get("epoch") != protocol.get("epochs")
+                or latest.get("run_sha256") != resolved.get("run_sha256")
+                or best.get("run_sha256") != resolved.get("run_sha256")):
+            raise ValueError("release holdout remains sealed: a registered run is incomplete or has mixed checkpoints")
+        if config.get("objective", {}).get("mode") == primary:
+            primary_configs.append((name, config, output, resolved))
+    if len(primary_configs) != len(seeds) or {cfg.get("seed") for _, cfg, _, _ in primary_configs} != set(seeds):
+        raise ValueError("release holdout remains sealed: one primary run per frozen seed is required")
+
+    expected_buckets = set()
+    held_out = [row for row in rows if manifest.groups[row.split_group_id] == "validation"]
+    paths = {}
+    for row in held_out:
+        if row.path_id is None:
+            expected_buckets.add(f"{row.language}/single/{row.action.kind}:{row.action.value}")
+        else:
+            paths.setdefault((row.path_id, row.language), []).append(row)
+    for (_, language), path_rows in paths.items():
+        ordered = sorted(path_rows, key=lambda row: row.path_step)
+        actions = ordered[0].action.kind + ":" + ordered[0].action.value
+        actions += "+" + ordered[1].action.kind + ":" + ordered[1].action.value
+        expected_buckets.add(f"{language}/held_out_path/{actions}")
+    if not expected_buckets:
+        raise ValueError("release holdout remains sealed: frozen validation buckets are empty")
+
+    expected_evaluator = {key: value for key, value in _implementation_identity().items()
+                          if key in {"pilot.py", "infer.py", "data.py"}}
+    protocol_sha = _hash_file(base / "protocol.json")
+    for name, config, output, resolved in primary_configs:
+        metrics_path = output / "generation_metrics.validation.json"
+        private_path = output / "generation.validation.private.jsonl"
+        if not metrics_path.is_file() or not private_path.is_file():
+            raise ValueError("release holdout remains sealed: validation generation evidence is missing")
+        report = _read(metrics_path)
+        expected_identity = _canonical_hash({
+            "checkpoint_sha256": _hash_file(output / "best.pt"),
+            "run_sha256": resolved["run_sha256"],
+            "corpus_sha256": manifest.dataset_sha256,
+            "split_sha256": manifest.sha256,
+            "protocol_sha256": protocol_sha,
+            "evaluation_split": "validation",
+            "evaluator_sha256": expected_evaluator,
+            "decoder_policy": {"max_new_tokens": protocol.get("generation_max_new_tokens", 160),
+                               "source_language_equals_target": True},
+        })
+        checks = report.get("quality_gate", {}).get("bucket_checks", {})
+        if (report.get("evaluation_split") != "validation"
+                or report.get("primary_for_quality_gate") is not True
+                or report.get("human_validated") is not False
+                or report.get("_evaluation_identity") != expected_identity
+                or set(checks) != expected_buckets
+                or report.get("quality_gate", {}).get("status") != "pass"):
+            raise ValueError("release holdout remains sealed: every primary validation gate must pass on bound evidence")
+        for bucket, score in report.get("scores", {}).items():
+            task = bucket.split("/", 2)[1]
+            prefix = "single_action" if task == "single" else "held_out_path"
+            thresholds = protocol.get("quality_thresholds", {})
+            if (bucket not in expected_buckets
+                    or score.get("valid_unicode_rate", 0) < thresholds.get("valid_unicode_rate", 1.0)
+                    or score.get("action_fidelity_rate") is None
+                    or score["action_fidelity_rate"] < thresholds.get(f"{prefix}_action_fidelity_rate", 1.0)
+                    or score.get("preservation_rate") is None
+                    or score["preservation_rate"] < thresholds.get(f"{prefix}_preservation_rate", 1.0)):
+                raise ValueError("release holdout remains sealed: recorded validation scores miss frozen thresholds")
+
+
 def evaluate_generation(config_path, *, max_new_tokens=160, split="test"):
     """Aggregate automated held-out scores; save generated text only privately."""
     from .experiment import (_canonical_hash, _implementation_identity, _parse_inventory,
@@ -340,6 +439,10 @@ def evaluate_generation(config_path, *, max_new_tokens=160, split="test"):
     if (protocol.get("implementation_sha256") != _implementation_identity()
             or protocol.get("runtime") != _runtime_identity()):
         raise ValueError("current code/runtime differs from the frozen pilot protocol")
+    if max_new_tokens != protocol.get("generation_max_new_tokens"):
+        raise ValueError("generation budget differs from the frozen pilot protocol")
+    if split == "test":
+        _require_release_test_gate(base, protocol, manifest, rows)
     checkpoint_path = output / "best.pt"
     if not checkpoint_path.is_file():
         raise FileNotFoundError("generation evaluation requires best.pt")
@@ -500,6 +603,12 @@ def run_suite(directory, *, resume=False):
         config = _read(base / name)
         output = (base / config["output_dir"]).resolve()
         run_experiment(base / name, resume=resume and (output / "latest.pt").is_file(), device="cpu")
+    # Score development generation for every registered config first. The
+    # release evaluator checks all primary-seed validation gates before it
+    # reads or scores any test targets.
+    for name in protocol["configs"]:
+        evaluate_generation(base / name, max_new_tokens=protocol["generation_max_new_tokens"],
+                            split="validation")
     for name in protocol["configs"]:
         result = run_experiment(base / name, resume=True, evaluate_test=True, device="cpu")
         generation = evaluate_generation(base / name, max_new_tokens=protocol["generation_max_new_tokens"])

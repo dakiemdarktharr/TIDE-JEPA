@@ -1,14 +1,22 @@
 # TIDE-JEPA preliminary English–Vietnamese pilot
 
-The user authorized AI authoring and review on 2026-10-01, with human review deferred. The latest version is v4.8, frozen as a preliminary synthetic pilot and paused during training. Four of 12 configurations completed, four are partial and four have not started; validation has not run, and the release holdout remains sealed. See the [v4.8 status](VI_EN_RESULTS_V4.8_STATUS.md), [aggregate results](VI_EN_RESULTS.md) and [historical version results](VI_EN_RESULTS_HISTORY.md). Earlier v4.7 and v4.2 quality gates failed; none establishes human-validated language quality or completes the scientific M4 benchmark.
+The user authorized AI authoring and review on 2026-10-01, with human review deferred. v4.8 remains paused: four of 12 configurations completed, four are partial and four have not started; validation has not run, and its release holdout remains sealed. v4.9 was superseded before training because evaluator hardening changed its frozen implementation identity. v4.10 has two independent Luna approvals bound to its frozen AI-preliminary protocol; all 12 configurations completed and validation-only evaluation failed the single-action preservation gate, so the release holdout remains sealed. v4.11 has two independent Luna approvals bound to its frozen AI-preliminary protocol; its 12-run training has not started and its new holdout remains sealed. See the [v4.11 status](VI_EN_RESULTS_V4.11_STATUS.md), [v4.10 status](VI_EN_RESULTS_V4.10_STATUS.md), [v4.10 aggregate validation report](VI_EN_RESULTS_V4.10_VALIDATION.md), [v4.9 historical status](VI_EN_RESULTS_V4.9_STATUS.md), [v4.8 status](VI_EN_RESULTS_V4.8_STATUS.md), [aggregate results](VI_EN_RESULTS.md) and [historical version results](VI_EN_RESULTS_HISTORY.md). Earlier v4.7 and v4.2 quality gates failed; none establishes human-validated language quality or completes the scientific M4 benchmark.
 
 Phan Rang Cham stays out of the pilot until source-use permission and language review are available. New agents/subagents use only `gpt-6-luna` with `high` or `xhigh`, unless the user approves another model; see [AGENTS.md](AGENTS.md).
 
 ## Data and review
 
-### Current paused v4.8
+### Current frozen v4.10
 
-The local frozen version is `data/pilot/vi-en-ai-v4.8`, with 7,680 AI-authored synthetic records in 192 combinations and 112/40/40 train/validation/release-holdout groups. Two independent AI reviews and an AI adjudication are recorded for preliminary use; this is not human or native-speaker validation. The frozen protocol specifies four controls, seeds 17/23/41, 58 epochs, width 48, four heads, two layers, max length 192, batch 80, learning rate 0.001 and source-copy weight 0.5.
+The frozen v4.10 protocol contains 7,680 AI-authored synthetic records in 192 groups (112/40/40 train/validation/release holdout) and uses a factor pool disjoint from v4.9. The schema key for the held-out partition is `test`; test evaluation remains gated until every registered run completes and all primary-seed validation generation gates pass. Two independent Luna reviews approved the exact draft and an AI adjudication recorded their agreement. This is not human or community validation. Training and validation completed; the primary TIDE gate failed, so no release-test scoring was done. See the [aggregate-only v4.10 status](VI_EN_RESULTS_V4.10_STATUS.md) and [validation report](VI_EN_RESULTS_V4.10_VALIDATION.md).
+
+### v4.11 frozen; training pending
+
+The frozen v4.11 pilot contains 7,680 AI-authored synthetic records in 192 groups (112/40/40 train/validation/release holdout), with three new agent factors and a holdout pool disjoint from v4.9/v4.10. Two independent `gpt-6-luna` high reviews approved the exact draft and the artifact-bound adjudication records their agreement. The 12 configurations use seeds 17/23/41, 58 epochs, width 48, four heads, two layers, batch 80, learning rate 0.001, TIDE primary, and preregistered source-copy weight 1.5. All runs completed with identities verified; validation-only evaluation is underway and the release holdout remains unopened. The source-copy change is an experiment, not evidence of improvement. All data remains under ignored `data/`, and no PhoMT/Cham rows were used. See [frozen status and commands](VI_EN_RESULTS_V4.11_STATUS.md).
+
+### Historical paused v4.8
+
+The previously frozen version `data/pilot/vi-en-ai-v4.8` had 7,680 AI-authored synthetic records in 192 combinations and 112/40/40 train/validation/release-holdout groups. Two independent AI reviews and an AI adjudication were recorded for preliminary use; this is not human or native-speaker validation. The frozen protocol specified four controls, seeds 17/23/41, 58 epochs, width 48, four heads, two layers, max length 192, batch 80, learning rate 0.001 and source-copy weight 0.5. Its data and run directories are absent on lattice; do not claim an exact resume here.
 
 At the user's request, the training runner and workers were stopped after seed 17 completed all four controls and seed 23 partially trained four controls. Seed 41 did not start. No suite report or evaluation exists for v4.8; its release holdout remains sealed. The data and checkpoint files are Git-ignored and were not pushed. See the [aggregate-only v4.8 status and local checkpoint hashes](VI_EN_RESULTS_V4.8_STATUS.md).
 
@@ -38,36 +46,30 @@ Equal examples, updates and architecture do not imply equal FLOPs. The runs log 
 
 ## Local commands
 
-Use the existing Python 3.11 runtime and the project venv libraries if its launcher fails:
+On the current Linux host, the following commands were verified on 2026-10-03: `.venv/bin/python -B -m unittest discover -s tests -v` (73 tests), `.venv/bin/python -m compileall -q tide_jepa tests`, and `.venv/bin/python -m pip check`. See the [Linux evidence and remaining gates](audits/2026-10-03/LINUX_REVALIDATION.md). The frozen v4.8 data and run directories are not present on this host; do not resume v4.8 until its matching ignored artifacts are transferred and verified. v4.9 was superseded before training. v4.10 training and validation are complete, but its holdout remains sealed after a validation gate failure. v4.11 review is pending.
 
-```powershell
-$env:PYTHONPATH = Join-Path (Get-Location) '.venv\Lib\site-packages'
-py -3.11 -B -m unittest discover -s tests -v
-```
+For a **new, separately reviewed version**, run from the project root. These are workflow commands, not an assertion that a clean bootstrap or full training run has already been verified. Never overwrite an existing version or reopen its release test for tuning. Bind the two independent AI reviews and adjudication to the exact draft before freezing. Finish all controls/seeds, evaluate generation on validation only, and proceed to release-test scoring only when every primary-seed validation gate passes.
 
-For a **new, separately reviewed version**, from the project root use the following order. These commands describe the protocol workflow; never overwrite an existing version or reopen its release test for tuning. Freeze the data/code identity and primary quality gate before training, finish all controls/seeds, evaluate generation on validation only, and proceed to release-test scoring only after validation/model selection is complete.
-
-```powershell
-$env:PYTHONPATH = Join-Path (Get-Location) '.venv\Lib\site-packages'
-py -3.11 -B -m tide_jepa.pilot_seed data/pilot/vi-en-ai-vX --pilot-version vX
+```sh
+.venv/bin/python -B -m tide_jepa.pilot_seed data/pilot/vi-en-ai-vX --pilot-version vX
 # Obtain and bind two independent AI review records and adjudication for this exact draft.
-py -3.11 -B -m tide_jepa.pilot freeze data/pilot/vi-en-ai-vX --epochs 80 --model-width 48 --model-heads 4 --model-layers 2 --batch-size 80 --learning-rate 0.001 --primary-mode tide
-py -3.11 -B scripts/train_vi_en_parallel.py data/pilot/vi-en-ai-vX --workers 4
-py -3.11 -B -m tide_jepa.pilot evaluate data/pilot/vi-en-ai-vX --evaluation-split validation
+.venv/bin/python -B -m tide_jepa.pilot freeze data/pilot/vi-en-ai-vX --epochs 58 --model-width 48 --model-heads 4 --model-layers 2 --batch-size 80 --learning-rate 0.001 --primary-mode tide
+.venv/bin/python -B scripts/train_vi_en_parallel.py data/pilot/vi-en-ai-vX --workers 4
+.venv/bin/python -B -m tide_jepa.pilot evaluate data/pilot/vi-en-ai-vX --evaluation-split validation
 # Stop if primary-mode validation misses a frozen threshold; create a new version to iterate.
-py -3.11 -B -m tide_jepa.pilot run data/pilot/vi-en-ai-vX --resume
-py -3.11 -B scripts/summarize_vi_en.py data/pilot/vi-en-ai-vX VI_EN_RESULTS.md
+.venv/bin/python -B -m tide_jepa.pilot run data/pilot/vi-en-ai-vX --resume
+.venv/bin/python -B scripts/summarize_vi_en.py data/pilot/vi-en-ai-vX VI_EN_RESULTS.md
 ```
 
 The private frozen corpus, review records, protocol and reports are under `data/pilot/`. Checkpoints, metric logs, private generated outputs and code snapshots are under `runs/`. Both trees are Git-ignored. They are local artifacts; the project does not publish model weights or dataset material.
 
-To launch the local browser demo:
+To launch the local browser demo, use the exact frozen configuration and `best.pt` from a completed reviewed run:
 
-```powershell
-.\scripts\run_vi_en_demo.ps1
+```sh
+.venv/bin/python -B -m tide_jepa.demo data/pilot/vi-en-ai-vX/tide-seed-17.json runs/vi-en-ai-vX/tide-seed-17/best.pt --port 8765
 ```
 
-Open `http://127.0.0.1:8765`. The demo runs on CPU, binds only to loopback, makes no cloud/model API calls, and does not log user input or generated text. It explicitly identifies the checkpoint as an AI-reviewed synthetic pilot. Default model choice is TIDE/seed 17, for demonstrating the project architecture; it is not selected by test performance. Use the same source and target language: translation edges are not supported by this prototype.
+Then open `http://127.0.0.1:8765`. The server binds only to loopback, makes no cloud/model API calls, and does not log user input or generated text. It identifies the checkpoint provenance and labels outputs diagnostic until quality is established. Use the same source and target language: translation edges are not supported by this prototype. A trained, approved demo checkpoint is not currently present on this host.
 
 ## Remaining scientific gates
 

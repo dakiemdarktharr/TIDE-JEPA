@@ -545,6 +545,10 @@ def run_experiment(
         "history": history,
     }
     if evaluate_test:
+        from .pilot import _require_release_test_gate
+
+        protocol = _read_json(base / "protocol.json")
+        _require_release_test_gate(base, protocol, manifest, records)
         evaluation_path = output_dir / "test_metrics.json"
         if not best_path.is_file():
             raise FileNotFoundError("test evaluation requires a completed best-validation checkpoint")

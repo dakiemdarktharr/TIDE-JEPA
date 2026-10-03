@@ -76,12 +76,10 @@ class OfflineGenerator:
             raise ValueError("source_language and target_language must be configured languages")
         if source_language != language:
             raise ValueError("cross-language translation is unsupported; source and target languages must match")
-        if len(actions) > 8:
-            raise ValueError("at most 8 ordered actions are supported per request")
-        if language not in self.cfg.languages:
-            raise ValueError(f"target_language must be one of {self.cfg.languages}")
         if not isinstance(actions, list) or not actions:
             raise ValueError("actions must be a nonempty list of {kind, value} objects")
+        if len(actions) > 8:
+            raise ValueError("at most 8 ordered actions are supported per request")
         action_ids = []
         for action in actions:
             if not isinstance(action, dict) or set(action) != {"kind", "value"}:

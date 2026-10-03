@@ -3,8 +3,11 @@
 Creates disposable synthetic artifacts; never accesses or prints PhoMT rows.
 """
 from contextlib import redirect_stdout
+import argparse
 from dataclasses import replace
+from datetime import datetime, timezone
 import io
+import hashlib
 import json
 from pathlib import Path
 import sys
@@ -21,7 +24,15 @@ from tide_jepa.data import dataset_fingerprint, read_jsonl
 from tide_jepa.pilot import evaluate_generation
 
 
-def main():
+def main(output_path=None):
+    if output_path:
+        destination = Path(output_path)
+    else:
+        now = datetime.now(timezone.utc)
+        stamp = now.strftime("%Y%m%dT%H%M%SZ")
+        destination = ROOT / "audits" / now.strftime("%Y-%m-%d") / f"root-probe-results-{stamp}.json"
+    if destination.exists():
+        raise FileExistsError(f"refusing to overwrite probe evidence: {destination}")
     fixture = PilotWorkflowTests()
     fixture.setUp()
     try:
@@ -31,6 +42,10 @@ def main():
         output = fixture.base / "root-probe-run"
         config["output_dir"] = str(output)
         path.write_text(json.dumps(config), encoding="utf-8")
+        protocol_path = fixture.base / "protocol.json"
+        protocol = json.loads(protocol_path.read_text(encoding="utf-8"))
+        protocol["config_files_sha256"][path.name] = hashlib.sha256(path.read_bytes()).hexdigest()
+        protocol_path.write_text(json.dumps(protocol), encoding="utf-8")
         original_save = experiment._save_checkpoint
 
         def fail_before_best(destination, state):
@@ -50,7 +65,7 @@ def main():
             try:
                 experiment.run_experiment(path, resume=True, evaluate_test=True, device="cpu")
                 test_failure = None
-            except FileNotFoundError as error:
+            except ValueError as error:
                 test_failure = str(error)
         evidence = {
             "fixture": "original synthetic, one epoch; no PhoMT",
@@ -58,7 +73,7 @@ def main():
             "latest_steps_after_crash": latest["steps"],
             "best_exists_after_resume": (output / "best.pt").exists(),
             "resume_reports_last_epoch": resumed["last_epoch"],
-            "test_evaluation_after_successful_resume": "passed" if test_failure is None else test_failure,
+            "release_test_gate_after_single_run": "unexpectedly opened" if test_failure is None else test_failure,
         }
         # Restore a consistent run in the disposable fixture, then alter only
         # its synthetic evaluation corpus/manifest, leaving approvals stale.
@@ -92,11 +107,14 @@ def main():
         evidence["modified_evaluation_corpus_rejected_by_evaluate_generation"] = generation_failure
         evidence["strict_runner_refuses_same_modified_corpus"] = strict_runner_failure
         print(json.dumps(evidence, indent=2))
-        (Path(__file__).parent / "root-probe-results.json").write_text(
-            json.dumps(evidence, indent=2) + "\n", encoding="utf-8")
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        with destination.open("x", encoding="utf-8") as result_file:
+            result_file.write(json.dumps(evidence, indent=2) + "\n")
     finally:
         fixture.tearDown()
 
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--output", help="save new evidence separately from the historical probe result")
+    main(parser.parse_args().output)

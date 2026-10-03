@@ -2,9 +2,11 @@
 
 This is an AI-authored and AI-reviewed synthetic pilot. **It is preliminary and has not been human/native-speaker validated.** PhoMT was not used for training; Phan Rang Cham is excluded.
 
-## Current status: v4.8 training paused
+## Current status: v4.11 frozen; training pending
 
 The v4.8 synthetic pilot was frozen with a fresh split and release holdout. Training was stopped at the user's request after four of 12 configurations completed and four were partial. Four configurations have not started. No validation evaluation or `suite_report.json` exists; the release holdout remains sealed. The dataset, review records, protocol and model checkpoints remain local under Git-ignored `data/` and `runs/`. See the [aggregate-only status note with checkpoint hashes](VI_EN_RESULTS_V4.8_STATUS.md). v4.8 has no quality result yet.
+
+Linux revalidation on 2026-10-03 passed 73 CPU tests with no skips, plus compile, dependency and synthetic crash/identity probes. The v4.8 data and run directories are absent on this host, so this code verification does not resume or evaluate v4.8. v4.9 was superseded before training because evaluator hardening changed its frozen implementation identity. v4.10 completed 12/12 configurations and validation-only generation; its primary TIDE gate failed on single-action preservation, so the release holdout remains sealed. v4.11 is frozen after two independent Luna reviews; training is next and its fresh release holdout remains sealed. See the [v4.11 status](VI_EN_RESULTS_V4.11_STATUS.md), [v4.10 status](VI_EN_RESULTS_V4.10_STATUS.md), [aggregate validation report](VI_EN_RESULTS_V4.10_VALIDATION.md), [v4.9 historical status](VI_EN_RESULTS_V4.9_STATUS.md) and the [Linux revalidation report](audits/2026-10-03/LINUX_REVALIDATION.md).
 
 ## Historical frozen vi-en-ai-v4.2 evaluation
 

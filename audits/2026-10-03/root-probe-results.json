@@ -1,0 +1,10 @@
+{
+  "fixture": "original synthetic, one epoch; no PhoMT",
+  "latest_epoch_after_crash": 1,
+  "latest_steps_after_crash": 3,
+  "best_exists_after_resume": true,
+  "resume_reports_last_epoch": 1,
+  "test_evaluation_after_successful_resume": "passed",
+  "modified_evaluation_corpus_rejected_by_evaluate_generation": "review gate differs from current corpus/split/inventory/alignment",
+  "strict_runner_refuses_same_modified_corpus": "review gate differs from current corpus/split/inventory/alignment"
+}

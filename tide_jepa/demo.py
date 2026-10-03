@@ -114,8 +114,22 @@ def main():
     generator = OfflineGenerator(args.run_config, args.checkpoint, device="cpu")
     if set(generator.cfg.languages) != {"en", "vi"}:
         raise ValueError("this preliminary demo requires an English-Vietnamese checkpoint")
+    protocol_path = config_path.parent / "protocol.json"
+    protocol = json.loads(protocol_path.read_text(encoding="utf-8")) if protocol_path.is_file() else {}
+    validation_path = Path(args.checkpoint).resolve().parent / "generation_metrics.validation.json"
+    validation_gate = "unverified"
+    if validation_path.is_file() and config["objective"]["mode"] == protocol.get("primary_quality_mode"):
+        validation = json.loads(validation_path.read_text(encoding="utf-8"))
+        validation_gate = validation.get("quality_gate", {}).get("status", "unverified")
+    elif config["objective"]["mode"] != protocol.get("primary_quality_mode"):
+        validation_gate = "control_only"
+    statement_path = config_path.parent / "data_statement.json"
+    version = json.loads(statement_path.read_text(encoding="utf-8")).get("version", "preliminary pilot") if statement_path.is_file() else "preliminary pilot"
     metadata = {"human_validated": False, "phomt_trained": False,
-                "mode": config["objective"]["mode"], "seed": config["seed"]}
+                "mode": config["objective"]["mode"], "seed": config["seed"],
+                "pilot_version": version,
+                "primary_quality_mode": protocol.get("primary_quality_mode"),
+                "validation_gate_status": validation_gate}
     with ThreadingHTTPServer(("127.0.0.1", args.port), make_handler(generator, metadata)) as server:
         print(f"TIDE-JEPA preliminary offline demo: http://127.0.0.1:{args.port}", flush=True)
         try:

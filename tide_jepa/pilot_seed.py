@@ -239,6 +239,9 @@ _V44_PATIENTS = (
     ("a gift", "một món quà"), ("a letter", "một lá thư"),
     ("a basket", "một cái giỏ"), ("a suitcase", "một chiếc va li"),
 )
+_V49_AGENTS = (("Kieu", "Kiều"), ("Thien", "Thiện"), ("Oanh", "Oanh"))
+_V410_AGENTS = (("Nhu", "Như"), ("Tuyen", "Tuyền"), ("Loc", "Lộc"))
+_V411_AGENTS = (("Kha My", "Khả My"), ("Tuan Kiet", "Tuấn Kiệt"), ("An Vy", "An Vy"))
 
 
 def _compose_v44_families():
@@ -471,6 +474,143 @@ def _compose_v48_families():
 FAMILIES_V48 = _compose_v48_families()
 
 
+def _compose_v49_families():
+    """Author a fresh agent-composition pool and split for v4.9."""
+    import random
+
+    agents = _V44_AGENTS + _V49_AGENTS
+    # The new agents create a fresh 3 x 8 x 8 combination pool. The training
+    # partition covers every factor pair that appears in validation or test.
+    remaining = [(agent, verb, patient)
+                 for agent in range(8, 11) for verb in range(8) for patient in range(8)]
+    train = []
+    pair_sets = (set(), set(), set())
+    while len(train) < 112:
+        best = max(
+            remaining,
+            key=lambda triple: (
+                sum(pair not in known for pair, known in zip(
+                    ((triple[0], triple[1]), (triple[0], triple[2]), (triple[1], triple[2])),
+                    pair_sets)),
+                tuple(-value for value in triple)),
+        )
+        train.append(best)
+        remaining.remove(best)
+        for pair, known in zip(((best[0], best[1]), (best[0], best[2]),
+                                (best[1], best[2])), pair_sets):
+            known.add(pair)
+    if any(not all(pair in known for pair, known in zip(
+            ((triple[0], triple[1]), (triple[0], triple[2]), (triple[1], triple[2])), pair_sets))
+           for triple in remaining):
+        raise ValueError("v4.9 held-out triples must reuse only training-seen factor pairs")
+    random.Random(20261008).shuffle(remaining)
+    validation, test = remaining[:40], remaining[40:80]
+
+    result = {"train": [], "validation": [], "test": []}
+    for split, combinations in (("train", train), ("validation", validation), ("test", test)):
+        for agent, verb, patient in combinations:
+            agent_en, agent_vi = agents[agent]
+            base, present, past, verb_vi = _V44_VERBS[verb]
+            patient_en, patient_vi = _V44_PATIENTS[patient]
+            event = f"compose49_{agent}_{verb}_{patient}"
+            result[split].append((event, agent_en, base, present, past,
+                                  patient_en, agent_vi, verb_vi, patient_vi))
+    return result
+
+
+FAMILIES_V49 = _compose_v49_families()
+
+
+def _compose_v410_families():
+    """Author another fresh agent-composition pool with a new holdout."""
+    import random
+
+    agents = _V44_AGENTS + _V49_AGENTS + _V410_AGENTS
+    remaining = [(agent, verb, patient)
+                 for agent in range(11, 14) for verb in range(8) for patient in range(8)]
+    train = []
+    pair_sets = (set(), set(), set())
+    while len(train) < 112:
+        best = max(
+            remaining,
+            key=lambda triple: (
+                sum(pair not in known for pair, known in zip(
+                    ((triple[0], triple[1]), (triple[0], triple[2]), (triple[1], triple[2])),
+                    pair_sets)),
+                tuple(-value for value in triple)),
+        )
+        train.append(best)
+        remaining.remove(best)
+        for pair, known in zip(((best[0], best[1]), (best[0], best[2]),
+                                (best[1], best[2])), pair_sets):
+            known.add(pair)
+    if any(not all(pair in known for pair, known in zip(
+            ((triple[0], triple[1]), (triple[0], triple[2]), (triple[1], triple[2])), pair_sets))
+           for triple in remaining):
+        raise ValueError("v4.10 held-out triples must reuse only training-seen factor pairs")
+    random.Random(20261009).shuffle(remaining)
+    validation, test = remaining[:40], remaining[40:80]
+
+    result = {"train": [], "validation": [], "test": []}
+    for split, combinations in (("train", train), ("validation", validation), ("test", test)):
+        for agent, verb, patient in combinations:
+            agent_en, agent_vi = agents[agent]
+            base, present, past, verb_vi = _V44_VERBS[verb]
+            patient_en, patient_vi = _V44_PATIENTS[patient]
+            event = f"compose410_{agent}_{verb}_{patient}"
+            result[split].append((event, agent_en, base, present, past,
+                                  patient_en, agent_vi, verb_vi, patient_vi))
+    return result
+
+
+FAMILIES_V410 = _compose_v410_families()
+
+
+def _compose_v411_families():
+    """Author a fresh agent-composition pool and unopened holdout for v4.11."""
+    import random
+
+    agents = _V44_AGENTS + _V49_AGENTS + _V410_AGENTS + _V411_AGENTS
+    remaining = [(agent, verb, patient)
+                 for agent in range(14, 17) for verb in range(8) for patient in range(8)]
+    train = []
+    pair_sets = (set(), set(), set())
+    while len(train) < 112:
+        best = max(
+            remaining,
+            key=lambda triple: (
+                sum(pair not in known for pair, known in zip(
+                    ((triple[0], triple[1]), (triple[0], triple[2]), (triple[1], triple[2])),
+                    pair_sets)),
+                tuple(-value for value in triple)),
+        )
+        train.append(best)
+        remaining.remove(best)
+        for pair, known in zip(((best[0], best[1]), (best[0], best[2]),
+                                (best[1], best[2])), pair_sets):
+            known.add(pair)
+    if any(not all(pair in known for pair, known in zip(
+            ((triple[0], triple[1]), (triple[0], triple[2]), (triple[1], triple[2])), pair_sets))
+           for triple in remaining):
+        raise ValueError("v4.11 held-out triples must reuse only training-seen factor pairs")
+    random.Random(20261010).shuffle(remaining)
+    validation, test = remaining[:40], remaining[40:80]
+
+    result = {"train": [], "validation": [], "test": []}
+    for split, combinations in (("train", train), ("validation", validation), ("test", test)):
+        for agent, verb, patient in combinations:
+            agent_en, agent_vi = agents[agent]
+            base, present, past, verb_vi = _V44_VERBS[verb]
+            patient_en, patient_vi = _V44_PATIENTS[patient]
+            event = f"compose411_{agent}_{verb}_{patient}"
+            result[split].append((event, agent_en, base, present, past,
+                                  patient_en, agent_vi, verb_vi, patient_vi))
+    return result
+
+
+FAMILIES_V411 = _compose_v411_families()
+
+
 def author_seed_v4(output_dir, *, version="v4"):
     """Create a new AI-authored v4-family draft with explicit bilingual frames."""
     output = Path(output_dir)
@@ -487,6 +627,9 @@ def author_seed_v4(output_dir, *, version="v4"):
                   FAMILIES_V43 if version == "v4.3" else
                   FAMILIES_V44 if version == "v4.4" else
                   FAMILIES_V45 if version == "v4.5" else
+                  FAMILIES_V411 if version == "v4.11" else
+                  FAMILIES_V410 if version == "v4.10" else
+                  FAMILIES_V49 if version == "v4.9" else
                   FAMILIES_V48 if version == "v4.8" else
                   FAMILIES_V47 if version == "v4.7" else
                   FAMILIES_V46 if version == "v4.6" else FAMILIES_V4)
@@ -505,7 +648,7 @@ def author_seed_v4(output_dir, *, version="v4"):
                          "predicate_en_present": en_present, "predicate_en_past": en_past,
                          "patient_en": en_patient, "patient_vi": vi_patient,
                          "context": "same event; requested action changes time or polarity only"}
-                if version in ("v4.6", "v4.7", "v4.8"):
+                if version in ("v4.6", "v4.7", "v4.8", "v4.9", "v4.10", "v4.11"):
                     frame["predicate_en_progressive"] = _V46_PROGRESSIVE[en_base]
                 frames[f"{group}-state-{index}"] = frame
             path_edges = ([(0, 2, "TIME", "PAST"), (2, 3, "POLARITY", "NEGATIVE")]
@@ -514,7 +657,7 @@ def author_seed_v4(output_dir, *, version="v4"):
             for language in ("en", "vi"):
                 for variant in range(2):
                     state_forms_v4_6 = None
-                    if version in ("v4.6", "v4.7", "v4.8"):
+                    if version in ("v4.6", "v4.7", "v4.8", "v4.9", "v4.10", "v4.11"):
                         progressive = _V46_PROGRESSIVE[en_base]
                         state_forms_v4_6 = {
                             "en": ((f"Right now, {en_agent} is {progressive} {en_patient}.",
@@ -584,6 +727,12 @@ def author_seed_v4(output_dir, *, version="v4"):
                                                  if version == "v4.7" else
                                                  "112 train, 40 validation, 40 release-holdout event combinations using three new agents; every held-out agent-verb, agent-patient, and verb-patient pair is represented in training; held-out combinations are disjoint from v4.4-v4.7; English NOW uses present progressive"
                                                  if version == "v4.8" else
+                                                 "112 train, 40 validation, 40 release-holdout combinations (stored with schema split label test) from three new agents; every held-out factor pair is represented in training; English NOW uses present progressive"
+                                                 if version == "v4.9" else
+                                                 "112 train, 40 validation, 40 release-holdout combinations (schema split label test) from three new agents; every held-out factor pair is represented in training; English NOW uses present progressive"
+                                                 if version == "v4.10" else
+                                                 "112 train, 40 validation, 40 release-holdout combinations (schema split label test) from three agents not used in prior pilot pools; every held-out factor pair is represented in training; English NOW uses present progressive"
+                                                 if version == "v4.11" else
                                                  "12 train, 4 validation, 4 release-holdout event families, fixed before model selection; new events not used in v3"),
                                 "surface_realizations_per_state": 2,
                                 "limitations": ["AI-authored; independent AI review is preliminary", "synthetic shared grammar; no domain-generalization claim",
@@ -598,7 +747,7 @@ def author_seed_v4(output_dir, *, version="v4"):
 def main():
     parser = argparse.ArgumentParser(description="Author a pending original synthetic Vi–En pilot for review")
     parser.add_argument("output_dir")
-    parser.add_argument("--pilot-version", choices=("v3", "v4", "v4.1", "v4.2", "v4.3", "v4.4", "v4.5", "v4.6", "v4.7", "v4.8"), default="v3")
+    parser.add_argument("--pilot-version", choices=("v3", "v4", "v4.1", "v4.2", "v4.3", "v4.4", "v4.5", "v4.6", "v4.7", "v4.8", "v4.9", "v4.10", "v4.11"), default="v3")
     args = parser.parse_args()
     result = (author_seed(args.output_dir) if args.pilot_version == "v3"
               else author_seed_v4(args.output_dir, version=args.pilot_version))
