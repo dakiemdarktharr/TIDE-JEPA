@@ -897,6 +897,57 @@ class DemoAPITests(unittest.TestCase):
             server.server_close()
             worker.join(timeout=2)
 
+    def test_local_demo_limits_generation_to_one_concurrent_request(self):
+        from http.server import ThreadingHTTPServer
+        from threading import Event, Thread
+        from types import SimpleNamespace
+        from urllib.error import HTTPError
+        from urllib.request import Request, urlopen
+        from tide_jepa.demo import make_handler
+
+        started, release = Event(), Event()
+
+        class SlowGenerator:
+            cfg = SimpleNamespace(languages=("en", "vi"))
+
+            def generate(self, _value):
+                started.set()
+                if not release.wait(timeout=5):
+                    raise TimeoutError("synthetic test generator timed out")
+                return {"generated_text": "synthetic", "valid_utf8": True}
+
+        server = ThreadingHTTPServer(("127.0.0.1", 0), make_handler(SlowGenerator(), {}))
+        worker = Thread(target=server.serve_forever, daemon=True)
+        worker.start()
+        url = f"http://127.0.0.1:{server.server_port}/generate"
+        body = json.dumps({"source": "synthetic", "source_language": "en",
+                           "target_language": "en", "actions": [{"kind": "TIME", "value": "PAST"}]}).encode()
+        first_result = []
+
+        def send_first():
+            try:
+                with urlopen(Request(url, data=body, headers={"Content-Type": "application/json"}), timeout=3) as response:
+                    first_result.append((response.status, json.load(response)))
+            except Exception as error:  # surfaced as an assertion below
+                first_result.append(error)
+
+        first = Thread(target=send_first, daemon=True)
+        first.start()
+        try:
+            self.assertTrue(started.wait(timeout=2))
+            with self.assertRaises(HTTPError) as error:
+                urlopen(Request(url, data=body, headers={"Content-Type": "application/json"}), timeout=2)
+            self.assertEqual(error.exception.code, 503)
+        finally:
+            release.set()
+            first.join(timeout=3)
+            server.shutdown()
+            server.server_close()
+            worker.join(timeout=2)
+        self.assertEqual(len(first_result), 1)
+        self.assertFalse(isinstance(first_result[0], Exception), repr(first_result[0]))
+        self.assertEqual(first_result[0][0], 200)
+
 
 @unittest.skipUnless(TORCH_AVAILABLE, "PyTorch is required for pilot freeze and integration")
 class PilotWorkflowTests(unittest.TestCase):

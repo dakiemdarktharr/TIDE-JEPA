@@ -4,10 +4,12 @@ import argparse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
 from pathlib import Path
+from threading import BoundedSemaphore
 
 
 def make_handler(generator, metadata):
     page = (Path(__file__).parent / "demo.html").read_bytes()
+    generation_slot = BoundedSemaphore(1)
 
     class Handler(BaseHTTPRequestHandler):
         def setup(self):
@@ -77,7 +79,13 @@ def make_handler(generator, metadata):
                 token_budget = value.get("max_new_tokens", 128)
                 if type(token_budget) is not int or not 0 < token_budget <= 160:
                     raise ValueError("Ngân sách token vượt phạm vi hỗ trợ.")
-                self.respond(200, generator.generate(value))
+                if not generation_slot.acquire(blocking=False):
+                    self.respond(503, {"error": "Demo đang xử lý yêu cầu khác; vui lòng thử lại."})
+                    return
+                try:
+                    self.respond(200, generator.generate(value))
+                finally:
+                    generation_slot.release()
             except (UnicodeDecodeError, json.JSONDecodeError, TypeError, ValueError, KeyError, TimeoutError, OSError) as error:
                 self.respond(400, {"error": "Yêu cầu không hợp lệ hoặc nằm ngoài phạm vi demo."})
 

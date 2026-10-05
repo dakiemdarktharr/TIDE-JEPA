@@ -29,4 +29,4 @@ After training is complete, verify every registered config and checkpoint identi
 .venv/bin/python -B scripts/summarize_vi_en_validation.py data/pilot/vi-en-ai-v4.18 VI_EN_RESULTS_V4.18_VALIDATION.md
 ```
 
-The v4.18 semantic checker fix and complete-coverage precondition are now regression-tested. Any follow-up quality gate must freeze the corrected evaluator before validation; use a fresh version, corpus/reviews/protocol, and release holdout. Never tune against the sealed v4.18 holdout. All reports remain aggregate-only and label the work preliminary and AI-reviewed, not human validated.
+The v4.18 semantic checker fix and complete-coverage precondition are now regression-tested. Current Linux verification passes 92 CPU tests with no skips, including the demo's one-at-a-time generation limit; compileall, `pip check`, and `git diff --check` also pass. Any follow-up quality gate must freeze the corrected evaluator before validation; use a fresh version, corpus/reviews/protocol, and release holdout. Never tune against the sealed v4.18 holdout. All reports remain aggregate-only and label the work preliminary and AI-reviewed, not human validated.
