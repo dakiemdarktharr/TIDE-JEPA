@@ -18,7 +18,7 @@ Status: active engineering closure record. Findings are traced to regression cov
 | E12 | Loopback demo bounds request body, socket read, action depth and generation budget, validates Host/Origin and suppresses request text from logs; `test_local_demo_reports_actual_model_and_rejects_invalid_requests`. | Closed for covered request paths |
 | E13 | Inference declares source and target language and rejects cross-language requests; `test_train_resume_generate_and_identity_guard`. | Closed |
 | E14 | Demo request snapshot, disabled form controls, and explicit status/error presentation are covered by UI implementation; full interactive browser automation remains unverified in the current desktop task. | Partially closed; browser behavior requires a fresh UI integration check |
-| Q01 | v3 and v4.1–v4.18 quality failures are preserved. v4.18's frozen evaluator omitted its event family, producing zero semantic-checker coverage; its gate failed closed and the release holdout remains untouched. A post-hoc corrected-checker rescore remains below all quality thresholds. | Open; blocks goal completion |
+| Q01 | v3 and v4.1–v4.19 quality outcomes are preserved. v4.19 completed 12/12 runs and validation with complete checker coverage, but 0/12 configurations and only 4/120 seed-by-bucket checks passed. The v4.19 release holdout was not generated or scored. | Open; blocks goal completion |
 | G01 | Python 3.11.9 / PyTorch 2.14.0+cpu, compileall, unit suite, and pip consistency were checked; clean-machine bootstrap and venv launcher reliability remain out of scope. | Partially closed |
 | G02 | `scripts/summarize_vi_en.py` validates registered runs and derives version, split sizes, mode, seed count, CE and gate from evidence; it emits aggregate metrics only. | Closed for current report contract |
 | G03 | README, ROADMAP, spec, pilot guide, current results, history, Ground Truth and vault index now distinguish preliminary AI evidence, failed quality gates, and human/external gates. Historical raw notes remain unchanged. | Closed for current state |
@@ -59,6 +59,10 @@ The v4.17 validation-only report exposes numeric thresholds and per-bucket failu
 ## 2026-10-05 v4.19 preregistration checkpoint
 
 Two independent `gpt-6-luna` high reviewers approved the same fresh v4.19 synthetic Vi–En corpus; the new 112/40/40 group split and 12-run matched-computation TIDE factorial are frozen. The protocol uses fixed-final-epoch selection and retains the existing per-bucket quality thresholds. Training and generation have not started, so this adds no new quality evidence and does not close Q01. Keep the release holdout sealed unless every registered validation cell, seed, language, and action bucket passes. The full aggregate protocol identities and reproduction commands are in [v4.19 status](../../VI_EN_RESULTS_V4.19_STATUS.md). No PhoMT or Cham data was used; AI review remains preliminary and is not human validation.
+
+## 2026-10-06 v4.19 validation checkpoint
+
+Training completed all 12 frozen runs at epoch 29 / 3,248 updates each. A post-training identity audit verified configs, approvals, data/split, code/runtime, checkpoint epochs/steps, matching `best.pt`/`latest.pt` weights, and complete train/validation metric epochs for all runs. Validation-only generation then completed 12/12; checker coverage, Unicode, and EOS were 8,640/8,640. The frozen quality gate failed: 0/12 configs passed all buckets and only 4/120 seed-by-bucket checks passed, with preservation the primary failure. The release holdout remains sealed and no test artifacts exist. Q01 remains open. See [aggregate validation report](../../VI_EN_RESULTS_V4.19_VALIDATION.md) and [status](../../VI_EN_RESULTS_V4.19_STATUS.md). The evidence is preliminary synthetic AI review, not human language validation.
 
 
 ## 2026-10-05 state update

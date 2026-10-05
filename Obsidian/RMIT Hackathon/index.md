@@ -8,8 +8,9 @@ This folder is an Obsidian-compatible, project-local knowledge vault. Open this 
 - [[wiki/RMIT Hackathon 2026]] — current official event-format facts, unresolved deliverables, and page inconsistencies.
 - [[wiki/Dataset Research — 2026-09-30]] — current corpus decision, PhoMT conditional permission, mandatory paper citation/release checklist, and intake status. The 2026-09-28 page is historical research context.
 - [[wiki/First Implementation Milestone]] — data-agnostic TIDE-JEPA prototype, independent review, and verification limits.
-- [[experiments/index]] — AI-reviewed synthetic Vi–En preliminary pilots; v4.19 frozen before training, with v4.18 validation failure and sealed holdout.
-- [v4.19 status](../../VI_EN_RESULTS_V4.19_STATUS.md) — two independent Luna reviews; fresh 12-run matched-computation protocol frozen, training not started, holdout sealed.
+- [[experiments/index]] — AI-reviewed synthetic Vi–En preliminary pilots; v4.19 completed training and validation, failed the quality gate, and retained its sealed holdout.
+- [v4.19 status](../../VI_EN_RESULTS_V4.19_STATUS.md) — 12/12 runs and validation complete; 0/12 configurations passed, release holdout remains sealed.
+- [v4.19 validation report](../../VI_EN_RESULTS_V4.19_VALIDATION.md) — aggregate-only frozen gate, denominators, and per-seed bucket outcomes.
 - [v4.13 status](../../VI_EN_RESULTS_V4.13_STATUS.md) — fresh, independently Luna-reviewed dose-response; 12/12 runs completed, both primary TIDE gates failed and holdout remains sealed.
 - [v4.18 status](../../VI_EN_RESULTS_V4.18_STATUS.md) — 12-run factorial; frozen evaluator lacked v4.18 checker coverage, and post-hoc rescore remains below threshold; holdout sealed.
 - [v4.18 post-hoc rescore](../../VI_EN_RESULTS_V4.18_RESCORING.md) — aggregate-only diagnostic, not frozen gate evidence.

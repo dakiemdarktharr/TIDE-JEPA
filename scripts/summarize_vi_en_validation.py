@@ -117,7 +117,11 @@ def summarize_validation(directory, destination):
             f"; transition balance `{balance}`"
             for mode, weight, latent, balance in sorted({(item["mode"], item["source_copy_weight"], item["latent_objective_weight"], item["transition_balance"])
                                                 for item in results}, key=lambda value: (value[0], value[1], value[2] or 0.0, value[3])))
-        + f". Seeds {', '.join(map(str, seeds))}; {protocol['epochs']} epochs and {results[0]['updates']} updates/config; width {protocol['model']['width']}, {protocol['model']['heads']} heads, {protocol['model']['layers']} layers. Checkpoints selected using the frozen validation criterion. Decoder: {protocol['decoder_policy']}.", "",
+        + f". Seeds {', '.join(map(str, seeds))}; {protocol['epochs']} epochs and {results[0]['updates']} updates/config; width {protocol['model']['width']}, {protocol['model']['heads']} heads, {protocol['model']['layers']} layers. "
+        + (f"The preregistered final epoch was evaluated (`{protocol['checkpoint_selection_policy']}`); validation loss did not select the checkpoint. "
+           if protocol.get("checkpoint_selection_policy") == "fixed_final_epoch" else
+           "Checkpoints were selected using the frozen validation criterion. ")
+        + f"Decoder: {protocol['decoder_policy']}.", "",
         f"The registered primary objective is `{primary}`. Frozen thresholds: valid Unicode 100%; single-action action fidelity and preservation each ≥90%; held-out-path action fidelity and preservation each ≥80%. Every configured primary weight, seed, and language/action bucket must meet all applicable thresholds.", "",
         ("## Validation result: **PASS**" if quality_pass and checker_coverage_complete else
          "## Validation result: **INVALID / FAIL-CLOSED — semantic checker coverage incomplete**"
