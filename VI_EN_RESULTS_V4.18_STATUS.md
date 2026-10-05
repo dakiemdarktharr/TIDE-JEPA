@@ -16,6 +16,8 @@ A separate training-only sanity check overfit one 80-row training group: action 
 
 The private corpus, reviews, protocol, metrics, generations, and checkpoints remain under Git-ignored `data/` and `runs/`. No PhoMT or Phan Rang Cham data was used. `human_validated=false`.
 
+A small paired best/latest validation diagnostic used the same 20 fixed inputs for seed 23 at copy weights 0 and 1.5. Both checkpoints had 0/20 slot preservation and 0/20 accepted-reference matches; this sample is too narrow for validation-quality estimates and is not frozen gate evidence. See [the checkpoint sample report](VI_EN_RESULTS_V4.18_CHECKPOINT_SAMPLE.md).
+
 The run command is:
 
 ```sh

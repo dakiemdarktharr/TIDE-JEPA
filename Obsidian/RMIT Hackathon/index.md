@@ -13,6 +13,7 @@ This folder is an Obsidian-compatible, project-local knowledge vault. Open this 
 - [v4.18 status](../../VI_EN_RESULTS_V4.18_STATUS.md) — 12-run factorial; frozen evaluator lacked v4.18 checker coverage, and post-hoc rescore remains below threshold; holdout sealed.
 - [v4.18 post-hoc rescore](../../VI_EN_RESULTS_V4.18_RESCORING.md) — aggregate-only diagnostic, not frozen gate evidence.
 - [v4.18 train-only overfit diagnostic](../../VI_EN_RESULTS_V4.18_OVERFIT_DIAGNOSTIC.md) — memorization sanity check on one train group; no generalization claim.
+- [v4.18 checkpoint sample](../../VI_EN_RESULTS_V4.18_CHECKPOINT_SAMPLE.md) — paired best/latest validation diagnostic; 20 inputs per checkpoint, not gate evidence.
 - [v4.17 status](../../VI_EN_RESULTS_V4.17_STATUS.md) — 12 runs and validation complete; all 60 primary checks failed, holdout sealed. See [aggregate report](../../VI_EN_RESULTS_V4.17_VALIDATION.md).
 - [v4.15 status](../../VI_EN_RESULTS_V4.15_STATUS.md) — latest completed nine-run comparison; primary TIDE gate failed and holdout sealed.
 - [v4.14 status](../../VI_EN_RESULTS_V4.14_STATUS.md) — corrected 15,360-record context-diversity pilot; six runs and validation completed, frozen TIDE gate failed, holdout sealed.
