@@ -366,6 +366,7 @@ def run_experiment(
         layers=model_settings.get("layers", 2),
         max_length=model_settings.get("max_length", 512),
         languages=languages,
+        source_pointer_decoder=model_settings.get("source_pointer_decoder", False),
     )
     if device == "auto":
         device = "cuda" if torch.cuda.is_available() else "cpu"

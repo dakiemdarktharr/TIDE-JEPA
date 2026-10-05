@@ -200,6 +200,7 @@ def compute_loss(model, batch: Batch, inventory: Inventory, objective: Objective
                 batch.language_ids[final_index : final_index + 1],
                 source_memory,
                 source_valid,
+                batch.source[first_index : first_index + 1],
             )
             path_token_losses.append(
                 F.cross_entropy(

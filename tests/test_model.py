@@ -6,6 +6,7 @@ TORCH_AVAILABLE = importlib.util.find_spec("torch") is not None
 if TORCH_AVAILABLE:
     import torch
     from tide_jepa import Action, Edge, EdgePair, EdgePath, Inventory, ModelConfig, PathPair
+    from tide_jepa.data import BYTE_OFFSET
     from tide_jepa.model import TIDEJEPA
     from tide_jepa.training import Batch, Objective, Trainer, compute_loss
 
@@ -186,6 +187,50 @@ class ModelTests(unittest.TestCase):
             self.model.output.bias[2] = 10
         output = self.model.generate(self.batch.source, self.batch.action_ids, self.batch.language_ids, 1, 2, 4)
         self.assertEqual(output.tolist(), [[1, 2], [1, 2]])
+
+    def test_source_pointer_decoder_copies_and_trains_through_mixture(self):
+        cfg = ModelConfig(vocab_size=259, action_count=1, width=8, heads=2, layers=1, max_length=12,
+                          languages=("en", "vi"), source_pointer_decoder=True)
+        model = TIDEJEPA(cfg)
+        source = torch.tensor([[BYTE_OFFSET + ord("a"), BYTE_OFFSET + ord("b"), 0]])
+        action_ids = torch.tensor([0])
+        language_ids = torch.tensor([0])
+        state, memory, source_valid = model.online.encode(source)
+        predicted = model.predict(state, action_ids, language_ids)
+        with torch.no_grad():
+            model.output.weight.zero_()
+            model.output.bias.fill_(-20)
+            model.output.bias[BYTE_OFFSET + ord("z")] = 20
+            model.pointer_query.weight.zero_()
+            model.pointer_query.bias.zero_()
+            model.pointer_key.weight.zero_()
+            model.pointer_key.bias.zero_()
+            model.pointer_gate.weight.zero_()
+            model.pointer_gate.bias.fill_(20)
+        log_probabilities = model.decode(
+            torch.tensor([[cfg.bos_id]]), predicted, language_ids, memory, source_valid, source)
+        probabilities = log_probabilities.exp()
+        torch.testing.assert_close(probabilities.sum(dim=-1), torch.ones((1, 1)))
+        self.assertEqual(log_probabilities.argmax(dim=-1).item(), BYTE_OFFSET + ord("a"))
+        generated = model.generate(source, action_ids, language_ids, cfg.bos_id, 2, 2)
+        self.assertEqual(generated.tolist(), [[cfg.bos_id, BYTE_OFFSET + ord("a"), 2]])
+
+        model.pointer_gate.bias.data.zero_()
+        target = torch.tensor([[BYTE_OFFSET + ord("b"), 2]])
+        batch = Batch(
+            source=source,
+            target=target,
+            decoder_input=torch.tensor([[cfg.bos_id, BYTE_OFFSET + ord("b")]]),
+            labels=target,
+            action_ids=action_ids,
+            language_ids=language_ids,
+            edges=(Edge("en", "source", "target", Action("TEST_KIND", "TEST_VALUE")),),
+        )
+        loss, _ = compute_loss(model, batch, self.inventory, Objective(mode="token_only"))
+        loss.backward()
+        for parameter in (model.pointer_query.weight, model.pointer_key.weight, model.pointer_gate.weight):
+            self.assertIsNotNone(parameter.grad)
+            self.assertTrue(torch.isfinite(parameter.grad).all())
 
     def test_byte_decoder_masks_invalid_utf8_and_finishes_codepoints(self):
         cfg = replace(self.cfg, vocab_size=259)

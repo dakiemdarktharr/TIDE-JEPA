@@ -14,7 +14,7 @@ from tide_jepa.phomt_intake import TRAIN_MEMBERS, _select_pairs
 from tide_jepa.data import dataset_fingerprint, read_jsonl
 from tide_jepa.pilot_seed import (FAMILIES_V43, FAMILIES_V44, FAMILIES_V45,
                                   FAMILIES_V46, FAMILIES_V47, FAMILIES_V48,
-                                  FAMILIES_V49, FAMILIES_V410, FAMILIES_V411, FAMILIES_V412, FAMILIES_V413, FAMILIES_V414, FAMILIES_V415, FAMILIES_V416, FAMILIES_V417, FAMILIES_V418, FAMILIES_V419, author_seed,
+                                  FAMILIES_V49, FAMILIES_V410, FAMILIES_V411, FAMILIES_V412, FAMILIES_V413, FAMILIES_V414, FAMILIES_V415, FAMILIES_V416, FAMILIES_V417, FAMILIES_V418, FAMILIES_V419, FAMILIES_V420, author_seed,
                                   author_seed_v4)
 from tide_jepa.schema import Action, Inventory
 
@@ -819,6 +819,36 @@ class SeedAuthoringTests(unittest.TestCase):
                 _semantic_frame_flags(row.target_text, row.language, frames[row.target_frame_id]))
                 for row in rows))
 
+    def test_v420_fresh_corpus_supports_checker_and_pairwise_holdout(self):
+        splits = [FAMILIES_V420[name] for name in ("train", "validation", "test")]
+        triples = [tuple(map(int, row[0].removeprefix("compose420_").split("_")))
+                   for split in splits for row in split]
+        self.assertEqual([len(split) for split in splits], [112, 40, 40])
+        self.assertEqual(len(set(triples)), 192)
+        self.assertTrue(all(41 <= triple[0] < 44 for triple in triples))
+        with tempfile.TemporaryDirectory() as temporary:
+            destination = Path(temporary) / "v4.20"
+            statement = author_seed_v4(destination, version="v4.20")
+            self.assertEqual(statement["records"], 15360)
+            self.assertEqual(statement["surface_realizations_per_state"], 4)
+            self.assertFalse(statement["phomt_used"])
+            self.assertFalse(statement["human_validated"])
+            self.assertIn("source-pointer decoder comparison", statement["split_policy"])
+            self.assertIn("source_pointer_decoder", statement["registered_hypotheses"])
+            inventory_value = json.loads((destination / "inventory.draft.json").read_text(encoding="utf-8"))
+            inventory = Inventory(tuple(Action(**value) for value in inventory_value["actions"]), {
+                language: frozenset(Action(**value) for value in inventory_value["proposed_by_language"][language])
+                for language in ("en", "vi")
+            })
+            rows = read_jsonl(destination / "corpus.draft.jsonl", inventory,
+                              languages=("en", "vi"), require_approved=False)
+            frames = json.loads((destination / "semantic_frames.draft.json").read_text(encoding="utf-8"))
+            from tide_jepa.pilot import _semantic_frame_flags
+            self.assertTrue(all((lambda flags: flags is not None and flags["action_fidelity"]
+                                 and flags["preservation"])(
+                _semantic_frame_flags(row.target_text, row.language, frames[row.target_frame_id]))
+                for row in rows))
+
     def test_unique_transition_weighting_rejects_unequal_representation_counts(self):
         from types import SimpleNamespace
         from tide_jepa.experiment import _transition_record_weights
@@ -1022,6 +1052,20 @@ class PilotWorkflowTests(unittest.TestCase):
         primary = [item for item in configs if item["objective"]["mode"] == "tide"]
         self.assertEqual({item["objective"]["latent_objective_weight"] for item in primary}, {0.1})
         self.assertEqual(protocol["primary_transition_balance_modes"], ["row_uniform", "unique_transition"])
+
+    def test_freeze_registers_vocabulary_and_source_pointer_decoder_conditions(self):
+        from tide_jepa.pilot import freeze_pilot
+        self.write_reviews()
+        freeze_pilot(
+            self.base, epochs=1, seeds=(17,), model_width=8, model_heads=2, model_layers=1,
+            condition_modes=("tide",), condition_source_pointer_decoder_modes=("vocabulary", "source_pointer"),
+            checkpoint_selection_policy="fixed_final_epoch")
+        protocol = json.loads((self.base / "protocol.json").read_text())
+        configs = [json.loads((self.base / name).read_text()) for name in protocol["configs"]]
+        self.assertEqual(protocol["primary_source_pointer_decoder_modes"], ["vocabulary", "source_pointer"])
+        self.assertIn("no matched-FLOP claim", protocol["compute_policy"])
+        self.assertEqual({item["model"]["source_pointer_decoder"] for item in configs}, {False, True})
+        self.assertEqual(len({item["output_dir"] for item in configs}), 2)
 
     def test_freeze_records_compute_matched_tide_matrix_and_final_epoch_selection(self):
         from tide_jepa.pilot import freeze_pilot
@@ -1282,6 +1326,35 @@ class PilotWorkflowTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "run identity"):
             run_experiment(path, resume=True, device="cpu")
         self.assertEqual((output / "resolved_run.json").read_bytes(), provenance_before)
+
+    def test_source_pointer_checkpoint_trains_and_loads_for_inference(self):
+        from tide_jepa.experiment import run_experiment
+        from tide_jepa.infer import OfflineGenerator
+        from tide_jepa.pilot import freeze_pilot
+        self.write_reviews()
+        freeze_pilot(
+            self.base, epochs=1, seeds=(17,), model_width=8, model_heads=2, model_layers=1,
+            condition_modes=("tide",), condition_source_pointer_decoder_modes=("source_pointer",),
+            checkpoint_selection_policy="fixed_final_epoch")
+        protocol = json.loads((self.base / "protocol.json").read_text())
+        path = self.base / protocol["configs"][0]
+        config = json.loads(path.read_text())
+        self.assertTrue(config["model"]["source_pointer_decoder"])
+        output = self.base / "local-pointer-run"
+        config["output_dir"] = str(output)
+        path.write_text(json.dumps(config))
+        protocol["config_files_sha256"][path.name] = hashlib.sha256(path.read_bytes()).hexdigest()
+        (self.base / "protocol.json").write_text(json.dumps(protocol))
+        with redirect_stdout(io.StringIO()):
+            result = run_experiment(path, device="cpu")
+        self.assertFalse(result["test_evaluated"])
+        generator = OfflineGenerator(path, output / "best.pt", device="cpu")
+        response = generator.generate({
+            "source": "Lan đọc một cuốn sách.", "source_language": "vi", "target_language": "vi",
+            "actions": [{"kind": "TIME", "value": "PAST"}], "max_new_tokens": 16,
+        })
+        self.assertTrue(response["valid_utf8"])
+        self.assertEqual(response["quality_status"], "diagnostic_only")
 
     def test_invalid_alignment_does_not_publish_approved_artifacts(self):
         from tide_jepa.pilot import freeze_pilot

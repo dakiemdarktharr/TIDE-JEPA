@@ -17,6 +17,7 @@ class ModelConfig:
     pad_id: int = 0
     bos_id: int = 1
     languages: tuple[str, ...] = LANGUAGES
+    source_pointer_decoder: bool = False
 
     def __post_init__(self):
         for key in ("vocab_size", "action_count", "width", "heads", "layers", "max_length"):
@@ -33,3 +34,5 @@ class ModelConfig:
             raise ValueError("bos_id must differ from pad_id")
         if not self.languages or len(set(self.languages)) != len(self.languages):
             raise ValueError("languages must be nonempty and unique")
+        if type(self.source_pointer_decoder) is not bool:
+            raise ValueError("source_pointer_decoder must be boolean")

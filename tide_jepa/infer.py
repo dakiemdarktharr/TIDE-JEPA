@@ -38,6 +38,7 @@ class OfflineGenerator:
             layers=model_settings.get("layers", 2),
             max_length=model_settings.get("max_length", 512),
             languages=tuple(config.get("languages", ("vi", "en", "cham_phan_rang"))),
+            source_pointer_decoder=model_settings.get("source_pointer_decoder", False),
         )
         self.model = TIDEJEPA(self.cfg).to(device)
         state = torch.load(Path(checkpoint), map_location="cpu", weights_only=True)

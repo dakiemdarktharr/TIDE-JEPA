@@ -114,6 +114,11 @@ class TIDEJEPA(nn.Module):
             [CrossAttention(cfg.width, cfg.heads) for _ in range(cfg.layers)])
         self.decoder_norm = nn.LayerNorm(cfg.width)
         self.output = nn.Linear(cfg.width, cfg.vocab_size)
+        if cfg.source_pointer_decoder:
+            self.pointer_query = nn.Linear(cfg.width, cfg.width)
+            self.pointer_key = nn.Linear(cfg.width, cfg.width)
+            self.pointer_gate = nn.Linear(cfg.width, 1)
+            nn.init.constant_(self.pointer_gate.bias, -1.0)
         self.target.eval()
 
     def train(self, mode=True):
@@ -149,7 +154,8 @@ class TIDEJEPA(nn.Module):
             predicted = self.predict(predicted, action_id.expand(state.shape[0]), language_ids)
         return predicted
 
-    def decode(self, decoder_input, predicted, language_ids, encoder_memory=None, source_valid=None):
+    def decode(self, decoder_input, predicted, language_ids, encoder_memory=None, source_valid=None,
+               source_tokens=None):
         if decoder_input.ndim != 2 or not 0 < decoder_input.shape[1] <= self.cfg.max_length:
             raise ValueError("decoder input length is invalid")
         valid = decoder_input != self.cfg.pad_id
@@ -169,12 +175,37 @@ class TIDEJEPA(nn.Module):
             x = block(x, valid, causal=True)
             if encoder_memory is not None:
                 x = self.decoder_cross_attention[index](x, encoder_memory, source_valid)
-        return self.output(self.decoder_norm(x))
+        hidden = self.decoder_norm(x)
+        logits = self.output(hidden)
+        if self.cfg.source_pointer_decoder:
+            if (encoder_memory is None or source_tokens is None or source_tokens.dtype != torch.long
+                    or source_tokens.shape != source_valid.shape or source_tokens.device != x.device):
+                raise ValueError("source-pointer decoding requires source token IDs matching encoder memory")
+            byte_valid = source_valid & (source_tokens >= BYTE_OFFSET) & (source_tokens < BYTE_OFFSET + 256)
+            if not byte_valid.any(dim=1).all():
+                raise ValueError("source-pointer decoding requires at least one UTF-8 byte per source")
+            batch, target_length, width = hidden.shape
+            heads, head_width = self.cfg.heads, width // self.cfg.heads
+            query = self.pointer_query(hidden).reshape(batch, target_length, heads, head_width).transpose(1, 2)
+            key = self.pointer_key(encoder_memory).reshape(
+                batch, encoder_memory.shape[1], heads, head_width).transpose(1, 2)
+            pointer_logits = query @ key.transpose(-1, -2) / math.sqrt(head_width)
+            pointer_logits = pointer_logits.masked_fill(~byte_valid[:, None, None, :],
+                                                         torch.finfo(pointer_logits.dtype).min)
+            pointer_weights = pointer_logits.softmax(dim=-1).mean(dim=1)
+            pointer_distribution = torch.zeros_like(logits)
+            pointer_distribution.scatter_add_(
+                2, source_tokens[:, None, :].expand(batch, target_length, -1), pointer_weights)
+            vocabulary_distribution = logits.softmax(dim=-1)
+            copy_gate = torch.sigmoid(self.pointer_gate(hidden))
+            distribution = (1.0 - copy_gate) * vocabulary_distribution + copy_gate * pointer_distribution
+            return distribution.clamp_min(torch.finfo(distribution.dtype).tiny).log()
+        return logits
 
     def forward(self, source, decoder_input, action_ids, language_ids):
         state, encoder_memory, source_valid = self.online.encode(source)
         predicted = self.predict(state, action_ids, language_ids)
-        logits = self.decode(decoder_input, predicted, language_ids, encoder_memory, source_valid)
+        logits = self.decode(decoder_input, predicted, language_ids, encoder_memory, source_valid, source)
         return logits, state, predicted
 
     @torch.no_grad()
@@ -191,7 +222,7 @@ class TIDEJEPA(nn.Module):
         state, encoder_memory, source_valid = self.online.encode(source)
         predicted = self.predict(state, action_ids, language_ids)
         return self._generate_from_prediction(predicted, language_ids, bos_id, eos_id,
-                                              max_new_tokens, encoder_memory, source_valid)
+                                              max_new_tokens, encoder_memory, source_valid, source)
 
     @torch.no_grad()
     def generate_path(
@@ -209,7 +240,7 @@ class TIDEJEPA(nn.Module):
         state, encoder_memory, source_valid = self.online.encode(source)
         predicted = self.predict_path(state, action_ids, language_ids)
         return self._generate_from_prediction(predicted, language_ids, bos_id, eos_id,
-                                              max_new_tokens, encoder_memory, source_valid)
+                                              max_new_tokens, encoder_memory, source_valid, source)
 
     def _validate_generation_args(self, bos_id: int, eos_id: int, max_new_tokens: int) -> None:
         if type(bos_id) is not int or bos_id != self.cfg.bos_id:
@@ -247,6 +278,7 @@ class TIDEJEPA(nn.Module):
         max_new_tokens: int,
         encoder_memory: torch.Tensor,
         source_valid: torch.Tensor,
+        source_tokens: torch.Tensor,
     ) -> torch.Tensor:
         tokens = torch.full((predicted.shape[0], 1), bos_id, dtype=torch.long, device=predicted.device)
         done = torch.zeros(predicted.shape[0], dtype=torch.bool, device=predicted.device)
@@ -257,7 +289,8 @@ class TIDEJEPA(nn.Module):
         utf8_states = [[0, 0x80, 0xBF] for _ in range(predicted.shape[0])]
         for step in range(max_new_tokens):
             remaining = max_new_tokens - step
-            logits = self.decode(tokens, predicted, language_ids, encoder_memory, source_valid)[:, -1].clone()
+            logits = self.decode(tokens, predicted, language_ids, encoder_memory, source_valid,
+                                 source_tokens)[:, -1].clone()
             for row, (needed, lower, upper) in enumerate(utf8_states):
                 if not constrain_utf8:
                     allowed_ids = [token for token in range(self.cfg.vocab_size)

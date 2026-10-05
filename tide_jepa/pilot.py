@@ -61,6 +61,7 @@ def freeze_pilot(directory, *, epochs=40, seeds=(17, 23, 41), model_width=32,
                  learning_rate=0.001, primary_mode="tide", source_copy_weight=0.0,
                  condition_modes=None, condition_source_copy_weights=None,
                  condition_latent_objective_weights=None, condition_transition_balances=None,
+                 condition_source_pointer_decoder_modes=None,
                  checkpoint_selection_policy="validation_loss", compute_source_copy_term=False):
     """Bind two distinct AI review records and adjudication to an exact draft.
 
@@ -94,6 +95,8 @@ def freeze_pilot(directory, *, epochs=40, seeds=(17, 23, 41), model_width=32,
                       if condition_latent_objective_weights is not None else (1.0,))
     transition_balances = (tuple(condition_transition_balances)
                            if condition_transition_balances is not None else ("row_uniform",))
+    pointer_decoder_modes = (tuple(condition_source_pointer_decoder_modes)
+                              if condition_source_pointer_decoder_modes is not None else ("vocabulary",))
     if (not selected_modes or len(set(selected_modes)) != len(selected_modes)
             or any(mode not in MODES for mode in selected_modes)
             or primary_mode not in selected_modes):
@@ -109,12 +112,16 @@ def freeze_pilot(directory, *, epochs=40, seeds=(17, 23, 41), model_width=32,
     if (not transition_balances or len(set(transition_balances)) != len(transition_balances)
             or any(value not in ("row_uniform", "unique_transition") for value in transition_balances)):
         raise ValueError("condition transition balances must be unique registered weighting modes")
+    if (not pointer_decoder_modes or len(set(pointer_decoder_modes)) != len(pointer_decoder_modes)
+            or any(value not in ("vocabulary", "source_pointer") for value in pointer_decoder_modes)):
+        raise ValueError("condition source-pointer decoder modes must be unique registered modes")
     if condition_latent_objective_weights is not None and primary_mode != "tide":
         raise ValueError("latent-objective dose registration currently requires tide as the primary mode")
     if compute_source_copy_term and set(selected_modes) != {"tide"}:
         raise ValueError("matched source-copy-term computation is currently restricted to TIDE-only conditions")
     custom_matrix = (condition_modes is not None or condition_source_copy_weights is not None
                      or condition_latent_objective_weights is not None or condition_transition_balances is not None
+                     or condition_source_pointer_decoder_modes is not None
                      or checkpoint_selection_policy != "validation_loss" or compute_source_copy_term)
     draft_inventory = _read(base / "inventory.draft.json")
     actions = tuple(Action(**item) for item in draft_inventory["actions"])
@@ -148,8 +155,9 @@ def freeze_pilot(directory, *, epochs=40, seeds=(17, 23, 41), model_width=32,
         "v4.15": "tide_jepa/pilot_seed.py:original-ai-authored-v4.15",
         "v4.16": "tide_jepa/pilot_seed.py:original-ai-authored-v4.16",
         "v4.17": "tide_jepa/pilot_seed.py:original-ai-authored-v4.17",
-        "v4.18": "tide_jepa/pilot_seed.py:original-ai-authored-v4.18",
+                  "v4.18": "tide_jepa/pilot_seed.py:original-ai-authored-v4.18",
         "v4.19": "tide_jepa/pilot_seed.py:original-ai-authored-v4.19",
+        "v4.20": "tide_jepa/pilot_seed.py:original-ai-authored-v4.20",
     }.get(version)
     if expected_provenance is None or any(r.provenance_ref != expected_provenance
            or r.license_ref != "original-ai-authored-internal-research; no-PhoMT-content" for r in rows):
@@ -193,7 +201,7 @@ def freeze_pilot(directory, *, epochs=40, seeds=(17, 23, 41), model_width=32,
                   "v4.12": 20261011, "v4.13": 20261012, "v4.14": 20261013,
                   "v4.15": 20261015, "v4.16": 20261017,
                   "v4.17": 20261018, "v4.18": 20261019,
-                  "v4.19": 20261020}.get(version, 20261001)
+                  "v4.19": 20261020, "v4.20": 20261021}.get(version, 20261001)
     manifest = SplitManifest(dataset_fingerprint(approved_rows), split_seed, fractions, groups,
                              {name: tuple(sorted(r.record_id for r in rows if groups[r.split_group_id] == name))
                               for name in ("train", "validation", "test")})
@@ -232,35 +240,39 @@ def freeze_pilot(directory, *, epochs=40, seeds=(17, 23, 41), model_width=32,
                 mode_latent_weights = latent_weights if mode == "tide" else (1.0,)
                 for latent_weight in mode_latent_weights:
                     for transition_balance in transition_balances:
-                        weight_slug = str(condition_weight).replace(".", "p")
-                        latent_slug = str(latent_weight).replace(".", "p")
-                        name_prefix = (f"{mode}-aux-{latent_slug}" if condition_latent_objective_weights is not None and mode == "tide"
-                                       else mode)
-                        if condition_transition_balances is not None:
-                            name_prefix += f"-balance-{transition_balance}"
-                        name = (f"{name_prefix}-copy-{weight_slug}-seed-{seed}.json" if custom_matrix
-                                else f"{name_prefix}-seed-{seed}.json")
-                        output_name = (f"{name_prefix}-copy-{weight_slug}-seed-{seed}" if custom_matrix
-                                       else f"{name_prefix}-seed-{seed}")
-                        objective_config = {"mode": mode, **({"source_copy_weight": condition_weight}
-                                                                if condition_weight else {})}
-                        if compute_source_copy_term:
-                            objective_config["compute_source_copy_term"] = True
-                        if condition_latent_objective_weights is not None and mode == "tide":
-                            objective_config["latent_objective_weight"] = latent_weight
-                        config = {"corpus": "corpus.jsonl", "inventory": "inventory.json", "alignments": "alignments.json",
-                                  "frozen_split": "split_manifest.json", "review_gate": "approval.json", "languages": ["en", "vi"],
-                                  "output_dir": os.path.relpath(root / "runs" / base.name / output_name, base),
-                                  "seed": seed, "model": {"width": model_width, "heads": model_heads,
-                                                            "layers": model_layers, "max_length": max_length},
-                                  "objective": objective_config,
-                                  **({"checkpoint_selection_policy": checkpoint_selection_policy}
-                                     if checkpoint_selection_policy != "validation_loss" else {}),
-                                  "training": {"epochs": epochs, "batch_size": batch_size,
-                                               "learning_rate": learning_rate,
-                                               "transition_balance": transition_balance}}
-                        _write(base / name, config)
-                        config_names.append(name)
+                        for pointer_decoder_mode in pointer_decoder_modes:
+                            weight_slug = str(condition_weight).replace(".", "p")
+                            latent_slug = str(latent_weight).replace(".", "p")
+                            name_prefix = (f"{mode}-aux-{latent_slug}" if condition_latent_objective_weights is not None and mode == "tide"
+                                           else mode)
+                            if condition_transition_balances is not None:
+                                name_prefix += f"-balance-{transition_balance}"
+                            if condition_source_pointer_decoder_modes is not None:
+                                name_prefix += f"-decoder-{pointer_decoder_mode}"
+                            name = (f"{name_prefix}-copy-{weight_slug}-seed-{seed}.json" if custom_matrix
+                                    else f"{name_prefix}-seed-{seed}.json")
+                            output_name = (f"{name_prefix}-copy-{weight_slug}-seed-{seed}" if custom_matrix
+                                           else f"{name_prefix}-seed-{seed}")
+                            objective_config = {"mode": mode, **({"source_copy_weight": condition_weight}
+                                                                    if condition_weight else {})}
+                            if compute_source_copy_term:
+                                objective_config["compute_source_copy_term"] = True
+                            if condition_latent_objective_weights is not None and mode == "tide":
+                                objective_config["latent_objective_weight"] = latent_weight
+                            config = {"corpus": "corpus.jsonl", "inventory": "inventory.json", "alignments": "alignments.json",
+                                      "frozen_split": "split_manifest.json", "review_gate": "approval.json", "languages": ["en", "vi"],
+                                      "output_dir": os.path.relpath(root / "runs" / base.name / output_name, base),
+                                      "seed": seed, "model": {"width": model_width, "heads": model_heads,
+                                                                "layers": model_layers, "max_length": max_length,
+                                                                "source_pointer_decoder": pointer_decoder_mode == "source_pointer"},
+                                      "objective": objective_config,
+                                      **({"checkpoint_selection_policy": checkpoint_selection_policy}
+                                         if checkpoint_selection_policy != "validation_loss" else {}),
+                                      "training": {"epochs": epochs, "batch_size": batch_size,
+                                                   "learning_rate": learning_rate,
+                                                   "transition_balance": transition_balance}}
+                            _write(base / name, config)
+                            config_names.append(name)
     # Local review files are assertions, not cryptographic proof of reviewer
     # identity. Actual independent Luna dispatch/review evidence is recorded by
     # the project owner; people with write access can alter every local gate.
@@ -293,9 +305,9 @@ def freeze_pilot(directory, *, epochs=40, seeds=(17, 23, 41), model_width=32,
                                      **({"release_holdout_scope": (
                                          "The release holdout uses the same ordered action paths as train and validation; "
                                          "it probes fresh held-out factor combinations only and does not add an action-order shift.")}
-                                        if version in ("v4.18", "v4.19") else {}),
+                                        if version in ("v4.18", "v4.19", "v4.20") else {}),
                                      **({"registered_hypotheses": statement["registered_hypotheses"]}
-                                        if version in ("v4.18", "v4.19") else {}),
+                                        if version in ("v4.18", "v4.19", "v4.20") else {}),
                                      **({"primary_latent_objective_weights": primary_latent_weights}
                                         if primary_latent_weights is not None else {}),
                                      **({"latent_objective_multiplier_scope": [
@@ -315,6 +327,7 @@ def freeze_pilot(directory, *, epochs=40, seeds=(17, 23, 41), model_width=32,
                                      "model": {"width": model_width, "heads": model_heads, "layers": model_layers,
                                                "max_length": max_length, "batch_size": batch_size,
                                                "learning_rate": learning_rate},
+                                     "primary_source_pointer_decoder_modes": list(pointer_decoder_modes),
                                      "generation_max_new_tokens": 160, "human_validated": False,
                                      "decoder_policy": "greedy byte-level UTF-8 constrained decoding; EOS only at complete codepoint boundaries",
                                      "quality_thresholds": {"valid_unicode_rate": 1.0,
@@ -324,7 +337,9 @@ def freeze_pilot(directory, *, epochs=40, seeds=(17, 23, 41), model_width=32,
                                                             "held_out_path_action_fidelity_rate": 0.8,
                                                             "held_out_path_preservation_rate": 0.8,
                                                             "scope": "each language/action bucket using the narrow synthetic frame checker"},
-                                     "compute_policy": ("TIDE-only conditions share architecture, examples, epochs, seed-wise batch order, and all loss computations; source-copy loss is computed in every condition and only its registered multiplier differs. Updates, tokens, and wall time are logged."
+                                     "compute_policy": ("Decoder-mode conditions share corpus, split, objective, seeds, examples, epochs, and batch order. Vocabulary-softmax and source-pointer variants differ in parameter count and per-token operations; no matched-FLOP claim is made. Log updates, tokens, wall time, and throughput."
+                                                        if condition_source_pointer_decoder_modes is not None else
+                                                        "TIDE-only conditions share architecture, examples, epochs, seed-wise batch order, and all loss computations; source-copy loss is computed in every condition and only its registered multiplier differs. Updates, tokens, and wall time are logged."
                                                         if compute_source_copy_term else
                                                         "equal examples, epochs, seed-wise batch order and architecture; log tokens, updates and wall time; no matched-FLOP claim")})
     return approval
@@ -375,14 +390,15 @@ def _semantic_frame_flags(text, language, frame):
                              FAMILIES_V45, FAMILIES_V46, FAMILIES_V47, FAMILIES_V48,
                              FAMILIES_V49, FAMILIES_V410, FAMILIES_V411, FAMILIES_V412,
                              FAMILIES_V413, FAMILIES_V414, FAMILIES_V415, FAMILIES_V416,
-                                     FAMILIES_V417, FAMILIES_V418, FAMILIES_V419)
+                             FAMILIES_V417, FAMILIES_V418, FAMILIES_V419, FAMILIES_V420)
     event = frame.get("event")
     definition = next((item for family_set in (FAMILIES_V4, FAMILIES_V42, FAMILIES_V43,
                                                FAMILIES_V44, FAMILIES_V45, FAMILIES_V46,
                                                FAMILIES_V47, FAMILIES_V48, FAMILIES_V49, FAMILIES_V410,
                                                FAMILIES_V411, FAMILIES_V412, FAMILIES_V413,
                                                FAMILIES_V414, FAMILIES_V415, FAMILIES_V416,
-                                               FAMILIES_V417, FAMILIES_V418, FAMILIES_V419)
+                                               FAMILIES_V417, FAMILIES_V418, FAMILIES_V419,
+                                               FAMILIES_V420)
                        for group in family_set.values() for item in group if item[0] == event), None)
     if definition is None:
         return None
@@ -791,6 +807,8 @@ def main():
     parser.add_argument("--condition-latent-objective-weights", nargs="+", type=float)
     parser.add_argument("--condition-transition-balances", nargs="+",
                         choices=("row_uniform", "unique_transition"))
+    parser.add_argument("--condition-source-pointer-decoder-modes", nargs="+",
+                        choices=("vocabulary", "source_pointer"))
     parser.add_argument("--checkpoint-selection-policy", choices=("validation_loss", "fixed_final_epoch"),
                         default="validation_loss")
     parser.add_argument("--compute-source-copy-term", action="store_true")
@@ -806,6 +824,7 @@ def main():
                               condition_source_copy_weights=args.condition_source_copy_weights,
                               condition_latent_objective_weights=args.condition_latent_objective_weights,
                               condition_transition_balances=args.condition_transition_balances,
+                              condition_source_pointer_decoder_modes=args.condition_source_pointer_decoder_modes,
                               checkpoint_selection_policy=args.checkpoint_selection_policy,
                               compute_source_copy_term=args.compute_source_copy_term)
     elif args.command == "run":
