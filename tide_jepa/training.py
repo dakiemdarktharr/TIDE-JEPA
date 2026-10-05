@@ -31,6 +31,7 @@ class Batch:
     pairs: tuple[EdgePair, ...] = ()
     paths: tuple[EdgePath, ...] = ()
     path_pairs: tuple[PathPair, ...] = ()
+    edge_weights: torch.Tensor | None = None
 
     def validate(self, cfg, inventory):
         size = len(self.edges)
@@ -58,6 +59,12 @@ class Batch:
                 raise ValueError("copy mask must be a boolean tensor matching labels on the batch device")
             if (self.copy_mask & (self.labels == cfg.pad_id)).any():
                 raise ValueError("copy mask cannot select padding labels")
+        if self.edge_weights is not None:
+            if (self.edge_weights.shape != (size,) or self.edge_weights.device != self.source.device
+                    or not self.edge_weights.is_floating_point()):
+                raise ValueError("edge weights must be a floating-point [edges] tensor on the batch device")
+            if not torch.isfinite(self.edge_weights).all() or (self.edge_weights <= 0).any():
+                raise ValueError("edge weights must be finite and positive")
         if not torch.equal(self.target, self.labels):
             raise ValueError("EMA target tokens and next-token labels must describe the same sequence")
         if not (self.decoder_input[:, 0] == cfg.bos_id).all():
@@ -91,6 +98,7 @@ class Batch:
 @dataclass(frozen=True)
 class Objective:
     mode: str = "tide"
+    latent_objective_weight: float = 1.0
     jepa_weight: float = 1.0
     alignment_weight: float = 1.0
     variance_weight: float = 0.1
@@ -105,6 +113,7 @@ class Objective:
         if self.mode not in {"token_only", "generic_jepa", "static_alignment", "tide"}:
             raise ValueError("unknown objective mode")
         weights = (
+            self.latent_objective_weight,
             self.jepa_weight,
             self.alignment_weight,
             self.variance_weight,
@@ -122,34 +131,47 @@ class Objective:
 def compute_loss(model, batch: Batch, inventory: Inventory, objective: Objective):
     batch.validate(model.cfg, inventory)
     logits, state, predicted = model(batch.source, batch.decoder_input, batch.action_ids, batch.language_ids)
-    token = F.cross_entropy(logits.flatten(0, 1), batch.labels.flatten(), ignore_index=model.cfg.pad_id)
+    edge_weights = (batch.edge_weights if batch.edge_weights is not None
+                    else torch.ones(len(batch.edges), dtype=logits.dtype, device=logits.device))
+    per_token = F.cross_entropy(logits.transpose(1, 2), batch.labels,
+                                ignore_index=model.cfg.pad_id, reduction="none")
+    token_mask = batch.labels != model.cfg.pad_id
+    token_weights = token_mask.to(logits.dtype) * edge_weights[:, None]
+    token_count = token_weights.sum()
+    token = (per_token * token_weights).sum() / token_count.clamp_min(1.0)
     copy_token = token.new_zeros(())
-    copy_token_count = 0
+    copy_token_count = token.new_zeros(())
     if objective.source_copy_weight:
         if batch.copy_mask is None:
             raise ValueError("source-copy objective requires a token-alignment mask")
         copy_mask = batch.copy_mask & (batch.labels != model.cfg.pad_id)
-        copy_token_count = int(copy_mask.sum().item())
-        if copy_token_count == 0:
+        copy_weights = copy_mask.to(logits.dtype) * edge_weights[:, None]
+        copy_token_count = copy_weights.sum()
+        if copy_token_count.item() == 0:
             raise ValueError("source-copy objective has no aligned target tokens")
-        per_token = F.cross_entropy(logits.transpose(1, 2), batch.labels,
-                                    ignore_index=model.cfg.pad_id, reduction="none")
-        copy_token = per_token[copy_mask].mean()
+        copy_token = (per_token * copy_weights).sum() / copy_token_count
     zero = token.new_zeros(())
     jepa, alignment, variance = zero, zero, zero
     path_jepa, path_token, path_alignment = zero, zero, zero
-    spread = state.var(dim=0, unbiased=False).add(1e-4).sqrt()
+    edge_weight_sum = edge_weights.sum()
+    weighted_state_mean = (state * edge_weights[:, None]).sum(dim=0) / edge_weight_sum
+    spread = (((state - weighted_state_mean).square() * edge_weights[:, None]).sum(dim=0)
+              / edge_weight_sum).add(1e-4).sqrt()
     target = None
     if objective.mode != "token_only":
         with torch.no_grad():
             target = model.target(batch.target)
-        jepa = F.mse_loss(predicted, target)
+        edge_jepa = F.mse_loss(predicted, target, reduction="none").mean(dim=-1)
+        jepa = (edge_jepa * edge_weights).sum() / edge_weight_sum
         variance = F.relu(1.0 - spread).mean()
         if objective.mode in {"static_alignment", "tide"} and batch.pairs:
             canonical_source = model.canonical(state)
             canonical_predicted = model.canonical(predicted)
             aligned = canonical_predicted if objective.mode == "static_alignment" else canonical_predicted - canonical_source
-            alignment = torch.stack([F.mse_loss(aligned[p.left], aligned[p.right]) for p in batch.pairs]).mean()
+            pair_losses = torch.stack([F.mse_loss(aligned[p.left], aligned[p.right]) for p in batch.pairs])
+            pair_weights = torch.stack([(edge_weights[p.left] + edge_weights[p.right]) / 2
+                                        for p in batch.pairs])
+            alignment = (pair_losses * pair_weights).sum() / pair_weights.sum()
     if batch.paths:
         path_predictions = []
         path_starts = []
@@ -195,20 +217,20 @@ def compute_loss(model, batch: Batch, inventory: Inventory, objective: Objective
             ).mean()
     total = (
         token
-        + objective.jepa_weight * jepa
-        + objective.alignment_weight * alignment
-        + objective.variance_weight * variance
-        + objective.path_weight * path_jepa
+        + objective.latent_objective_weight * objective.jepa_weight * jepa
+        + objective.latent_objective_weight * objective.alignment_weight * alignment
+        + objective.latent_objective_weight * objective.variance_weight * variance
+        + objective.latent_objective_weight * objective.path_weight * path_jepa
         + objective.path_token_weight * path_token
-        + objective.path_alignment_weight * path_alignment
+        + objective.latent_objective_weight * objective.path_alignment_weight * path_alignment
         + objective.source_copy_weight * copy_token
     )
     denominators = {
-        "token_count": int((batch.labels != model.cfg.pad_id).sum().item()),
+        "token_count": float(token_count.detach()),
         "copy_token": copy_token,
-        "copy_token_count": copy_token_count,
-        "edge_count": len(batch.edges),
-        "alignment_count": len(batch.pairs),
+        "copy_token_count": float(copy_token_count.detach()),
+        "edge_count": float(edge_weight_sum.detach()),
+        "alignment_count": float(pair_weights.sum().detach()) if objective.mode in {"static_alignment", "tide"} and batch.pairs else 0.0,
         "path_count": len(batch.paths),
         "path_alignment_count": len(batch.path_pairs),
     }

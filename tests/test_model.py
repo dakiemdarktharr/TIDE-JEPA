@@ -106,6 +106,36 @@ class ModelTests(unittest.TestCase):
             compute_loss(self.model, self.batch, self.inventory,
                          Objective(mode="token_only", source_copy_weight=0.5))
 
+    def test_unique_transition_weights_scale_token_and_copy_denominators(self):
+        weights = torch.tensor([0.5, 1.0])
+        copy_mask = torch.tensor([[True, True, False], [True, True, False]])
+        batch = replace(self.batch, edge_weights=weights, copy_mask=copy_mask)
+        logits, _state, _predicted = self.model(batch.source, batch.decoder_input,
+                                                batch.action_ids, batch.language_ids)
+        per_token = torch.nn.functional.cross_entropy(
+            logits.transpose(1, 2), batch.labels, ignore_index=self.cfg.pad_id, reduction="none")
+        valid = (batch.labels != self.cfg.pad_id).to(logits.dtype) * weights[:, None]
+        expected = (per_token * valid).sum() / valid.sum()
+        copy_weights = copy_mask.to(logits.dtype) * weights[:, None]
+        expected_copy_count = copy_weights.sum()
+        expected_copy = (per_token * copy_weights).sum() / expected_copy_count
+        loss, metrics = compute_loss(self.model, batch, self.inventory,
+                                     Objective(mode="token_only", source_copy_weight=0.5))
+        torch.testing.assert_close(metrics["token"], expected)
+        self.assertEqual(metrics["token_count"], 4.5)
+        self.assertEqual(metrics["edge_count"], 1.5)
+        self.assertEqual(metrics["copy_token_count"], 3.0)
+        torch.testing.assert_close(metrics["copy_token"], expected_copy)
+        self.assertTrue(torch.isfinite(loss))
+
+    def test_batch_rejects_nonpositive_or_malformed_edge_weights(self):
+        for weights in (torch.tensor([1.0]), torch.tensor([1.0, 0.0]),
+                        torch.tensor([1.0, float("nan")])):
+            with self.subTest(weights=weights):
+                batch = replace(self.batch, edge_weights=weights)
+                with self.assertRaises(ValueError):
+                    batch.validate(self.cfg, self.inventory)
+
     def test_batch_rejects_unlicensed_or_mislabelled_edges(self):
         self.batch.pairs = (EdgePair(0, 1, "unknown"),)
         with self.assertRaises(ValueError):
@@ -241,6 +271,17 @@ class ModelTests(unittest.TestCase):
         self.assertEqual(trainer.steps, 1)
         self.assertGreater(metrics["path_jepa"], 0)
         self.assertGreater(metrics["path_token"], 0)
+
+    def test_tide_auxiliary_multiplier_scales_only_latent_terms(self):
+        model, inventory, batch = self.make_composition_batch()
+        token_loss, _ = compute_loss(model, batch, inventory, Objective(mode="token_only"))
+        full_loss, _ = compute_loss(model, batch, inventory, Objective(mode="tide"))
+        zero_aux_loss, _ = compute_loss(
+            model, batch, inventory, Objective(mode="tide", latent_objective_weight=0.0))
+        half_aux_loss, _ = compute_loss(
+            model, batch, inventory, Objective(mode="tide", latent_objective_weight=0.5))
+        torch.testing.assert_close(zero_aux_loss, token_loss)
+        torch.testing.assert_close(half_aux_loss, token_loss + 0.5 * (full_loss - token_loss))
 
     def test_baselines_receive_the_same_composed_path_text_supervision(self):
         model, inventory, batch = self.make_composition_batch()

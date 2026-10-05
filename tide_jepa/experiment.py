@@ -155,6 +155,29 @@ def _batch_records(records, batch_size: int, *, shuffle_seed: int | None = None)
         yield tuple(record for key in pending for record in grouped[key])
 
 
+def _transition_record_weights(records, weighting: str):
+    """Return edge-loss weights, balancing repeated path/single realizations when requested."""
+    if weighting not in {"row_uniform", "unique_transition"}:
+        raise ValueError("transition weighting must be row_uniform or unique_transition")
+    weights = {record.record_id: 1.0 for record in records}
+    if weighting == "row_uniform":
+        return weights
+    grouped = {}
+    for record in records:
+        key = (record.language, record.source_frame_id, record.target_frame_id,
+               record.action.kind, record.action.value)
+        roles = grouped.setdefault(key, [[], []])
+        is_path = record.path_id is not None
+        roles[1 if is_path else 0].append(record.record_id)
+    for single_ids, path_ids in grouped.values():
+        if single_ids and path_ids:
+            if len(single_ids) != len(path_ids):
+                raise ValueError("unique-transition weighting requires matched standalone/path row multiplicities")
+            for record_id in (*single_ids, *path_ids):
+                weights[record_id] = 0.5
+    return weights
+
+
 def _read_alignments(path: Path | None, record_map: dict):
     if path is None:
         return (), ()
@@ -181,7 +204,8 @@ def _read_alignments(path: Path | None, record_map: dict):
     return tuple(edge_pairs), tuple(path_pairs)
 
 
-def _build_experiment_batch(rows, cfg, inventory, device, edge_alignment, path_alignment):
+def _build_experiment_batch(rows, cfg, inventory, device, edge_alignment, path_alignment,
+                            record_weights=None):
     batch = build_batch(rows, cfg, inventory, device=device)
     local_edges = {record.record_id: index for index, record in enumerate(rows)}
     edge_pairs = tuple(
@@ -198,7 +222,10 @@ def _build_experiment_batch(rows, cfg, inventory, device, edge_alignment, path_a
         for left, right, relation in path_alignment
         if left in local_paths and right in local_paths
     )
-    batch = replace(batch, pairs=edge_pairs, path_pairs=path_pairs)
+    batch = replace(batch, pairs=edge_pairs, path_pairs=path_pairs,
+                    edge_weights=(torch.tensor([record_weights[row.record_id] for row in rows],
+                                               dtype=torch.float32, device=device)
+                                  if record_weights is not None else None))
     batch.validate(cfg, inventory)
     return batch
 
@@ -231,12 +258,12 @@ def _evaluate(model, records, cfg, inventory, objective, batch_size, device, edg
     result.update(denominators)
     result["examples"] = examples
     result["loss"] = (result.get("token", 0.0) + objective.source_copy_weight * result.get("copy_token", 0.0)
-                      + objective.jepa_weight * result.get("jepa", 0.0)
-                      + objective.alignment_weight * result.get("alignment", 0.0)
-                      + objective.variance_weight * result.get("variance", 0.0)
-                      + objective.path_weight * result.get("path_jepa", 0.0)
+                      + objective.latent_objective_weight * objective.jepa_weight * result.get("jepa", 0.0)
+                      + objective.latent_objective_weight * objective.alignment_weight * result.get("alignment", 0.0)
+                      + objective.latent_objective_weight * objective.variance_weight * result.get("variance", 0.0)
+                      + objective.latent_objective_weight * objective.path_weight * result.get("path_jepa", 0.0)
                       + objective.path_token_weight * result.get("path_token", 0.0)
-                      + objective.path_alignment_weight * result.get("path_alignment", 0.0))
+                      + objective.latent_objective_weight * objective.path_alignment_weight * result.get("path_alignment", 0.0))
     return result
 
 
@@ -322,6 +349,8 @@ def run_experiment(
     }
     if not split_records["train"] or not split_records["validation"] or not split_records["test"]:
         raise ValueError("train, validation, and test splits must all contain records")
+    training_weights = _transition_record_weights(
+        split_records["train"], training.get("transition_balance", "row_uniform"))
 
     objective = Objective(**config.get("objective", {}))
     model_settings = config.get("model", {})
@@ -451,7 +480,8 @@ def run_experiment(
         seen = 0
         updates_before = trainer.steps
         for rows in _batch_records(split_records["train"], batch_size, shuffle_seed=seed + epoch):
-            batch = _build_experiment_batch(rows, cfg, inventory, device, edge_alignment, path_alignment)
+            batch = _build_experiment_batch(rows, cfg, inventory, device, edge_alignment, path_alignment,
+                                            training_weights)
             metrics = trainer.step(batch)
             weight = len(rows)
             seen += weight
@@ -468,13 +498,14 @@ def run_experiment(
         train_metrics = {name: totals.get(name, 0.0) / count if count else 0.0
                          for name, count in metric_counts.items()}
         train_metrics["loss"] = (train_metrics["token"] + objective.source_copy_weight * train_metrics["copy_token"]
-                                  + objective.jepa_weight * train_metrics["jepa"]
-                                  + objective.alignment_weight * train_metrics["alignment"]
-                                  + objective.variance_weight * train_metrics["variance"]
-                                  + objective.path_weight * train_metrics["path_jepa"]
+                                  + objective.latent_objective_weight * objective.jepa_weight * train_metrics["jepa"]
+                                  + objective.latent_objective_weight * objective.alignment_weight * train_metrics["alignment"]
+                                  + objective.latent_objective_weight * objective.variance_weight * train_metrics["variance"]
+                                  + objective.latent_objective_weight * objective.path_weight * train_metrics["path_jepa"]
                                   + objective.path_token_weight * train_metrics["path_token"]
-                                  + objective.path_alignment_weight * train_metrics["path_alignment"])
-        train_metrics.update({"token_count": metric_counts["token"], "copy_token_count": metric_counts["copy_token"], "edge_count": seen,
+                                  + objective.latent_objective_weight * objective.path_alignment_weight * train_metrics["path_alignment"])
+        train_metrics.update({"token_count": metric_counts["token"], "copy_token_count": metric_counts["copy_token"],
+                              "edge_count": metric_counts["jepa"],
                               "alignment_count": metric_counts["alignment"],
                               "path_count": metric_counts["path_token"],
                               "path_alignment_count": metric_counts["path_alignment"]})

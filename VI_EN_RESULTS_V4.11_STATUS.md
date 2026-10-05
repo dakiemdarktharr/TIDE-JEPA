@@ -13,9 +13,11 @@ This is an original AI-authored synthetic English–Vietnamese pilot. It is prel
 - Primary mode is TIDE. Source-copy loss weight is 1.5, preregistered as an unverified response to v4.10's preservation failure. It is not evidence of improvement.
 - Frozen gates are unchanged: valid Unicode 100%; each language/action single-action fidelity and preservation bucket at least 90%; held-out path fidelity and preservation at least 80%. Holdout access requires all runs complete and primary TIDE validation gates passing.
 
-## Run state
+## Run state and quality result
 
-Freeze and all 12 CPU training runs completed on lattice's project `.venv` using Python 3.11.17 and CPU PyTorch 2.14.0. Every run reached 58 epochs / 3,248 steps; protocol/runtime/implementation and run identities match, and `best.pt`/`latest.pt` agree for every run. Validation-only evaluation is now running. No test metrics exist. Keep the release holdout sealed if any primary validation gate fails. Dataset, reviews, protocol, checkpoints and run logs stay under Git-ignored `data/` and `runs/`.
+Freeze and all 12 CPU training runs completed on lattice's project `.venv` using Python 3.11.17 and CPU PyTorch 2.14.0. Every run reached 58 epochs / 3,248 steps; protocol/runtime/implementation and run identities match, and `best.pt`/`latest.pt` agree for every run. Validation-only generation completed for all 12 configurations. The primary TIDE gate **failed for all three seeds**, chiefly on single-action preservation; action fidelity also failed in some Vietnamese/English buckets. Unicode validity and EOS termination were 100%. See the [aggregate-only validation report](VI_EN_RESULTS_V4.11_VALIDATION.md).
+
+The direct test-evaluation API was checked after this failure and refused to score the release holdout with `release holdout remains sealed: every primary validation gate must pass on bound evidence`. No test metrics were created. Preserve v4.11 unchanged; any follow-up must use a new corpus version, independent reviews, and a fresh holdout. Dataset, reviews, protocol, checkpoints, generated examples and run logs stay under Git-ignored `data/` and `runs/`.
 
 Reproduce the frozen run from the repository root:
 
@@ -24,7 +26,7 @@ Reproduce the frozen run from the repository root:
 .venv/bin/python -B -m tide_jepa.pilot evaluate data/pilot/vi-en-ai-v4.11 --evaluation-split validation
 ```
 
-Only after validation passes every primary TIDE gate may the release test be evaluated:
+The validation gate failed, so do not run release-test evaluation for v4.11. For a future version, release-test evaluation is permitted only after every primary TIDE validation gate passes:
 
 ```bash
 .venv/bin/python -B -m tide_jepa.pilot evaluate data/pilot/vi-en-ai-v4.11 --evaluation-split test

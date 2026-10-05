@@ -58,7 +58,9 @@ def _hash_file(path):
 
 def freeze_pilot(directory, *, epochs=40, seeds=(17, 23, 41), model_width=32,
                  model_heads=4, model_layers=1, max_length=192, batch_size=80,
-                 learning_rate=0.001, primary_mode="tide", source_copy_weight=0.0):
+                 learning_rate=0.001, primary_mode="tide", source_copy_weight=0.0,
+                 condition_modes=None, condition_source_copy_weights=None,
+                 condition_latent_objective_weights=None, condition_transition_balances=None):
     """Bind two distinct AI review records and adjudication to an exact draft.
 
     The user has authorized AI-reviewed preliminary experiments. This specific
@@ -80,6 +82,32 @@ def freeze_pilot(directory, *, epochs=40, seeds=(17, 23, 41), model_width=32,
         raise ValueError("source_copy_weight must be a finite nonnegative number")
     if primary_mode not in MODES:
         raise ValueError("primary_mode must name one registered objective control")
+    selected_modes = tuple(condition_modes) if condition_modes is not None else MODES
+    copy_weights = (tuple(condition_source_copy_weights)
+                    if condition_source_copy_weights is not None else (source_copy_weight,))
+    latent_weights = (tuple(condition_latent_objective_weights)
+                      if condition_latent_objective_weights is not None else (1.0,))
+    transition_balances = (tuple(condition_transition_balances)
+                           if condition_transition_balances is not None else ("row_uniform",))
+    if (not selected_modes or len(set(selected_modes)) != len(selected_modes)
+            or any(mode not in MODES for mode in selected_modes)
+            or primary_mode not in selected_modes):
+        raise ValueError("condition modes must be unique registered controls and include the primary mode")
+    if (not copy_weights or len(set(copy_weights)) != len(copy_weights)
+            or any(not isinstance(value, (int, float)) or isinstance(value, bool)
+                   or not math.isfinite(value) or value < 0 for value in copy_weights)):
+        raise ValueError("condition source-copy weights must be unique finite nonnegative values")
+    if (not latent_weights or len(set(latent_weights)) != len(latent_weights)
+            or any(not isinstance(value, (int, float)) or isinstance(value, bool)
+                   or not math.isfinite(value) or value < 0 for value in latent_weights)):
+        raise ValueError("condition latent-objective weights must be unique finite nonnegative values")
+    if (not transition_balances or len(set(transition_balances)) != len(transition_balances)
+            or any(value not in ("row_uniform", "unique_transition") for value in transition_balances)):
+        raise ValueError("condition transition balances must be unique registered weighting modes")
+    if condition_latent_objective_weights is not None and primary_mode != "tide":
+        raise ValueError("latent-objective dose registration currently requires tide as the primary mode")
+    custom_matrix = (condition_modes is not None or condition_source_copy_weights is not None
+                     or condition_latent_objective_weights is not None or condition_transition_balances is not None)
     draft_inventory = _read(base / "inventory.draft.json")
     actions = tuple(Action(**item) for item in draft_inventory["actions"])
     proposed = draft_inventory["proposed_by_language"]
@@ -106,6 +134,13 @@ def freeze_pilot(directory, *, epochs=40, seeds=(17, 23, 41), model_width=32,
         "v4.9": "tide_jepa/pilot_seed.py:original-ai-authored-v4.9",
         "v4.10": "tide_jepa/pilot_seed.py:original-ai-authored-v4.10",
         "v4.11": "tide_jepa/pilot_seed.py:original-ai-authored-v4.11",
+        "v4.12": "tide_jepa/pilot_seed.py:original-ai-authored-v4.12",
+        "v4.13": "tide_jepa/pilot_seed.py:original-ai-authored-v4.13",
+        "v4.14": "tide_jepa/pilot_seed.py:original-ai-authored-v4.14",
+        "v4.15": "tide_jepa/pilot_seed.py:original-ai-authored-v4.15",
+        "v4.16": "tide_jepa/pilot_seed.py:original-ai-authored-v4.16",
+        "v4.17": "tide_jepa/pilot_seed.py:original-ai-authored-v4.17",
+        "v4.18": "tide_jepa/pilot_seed.py:original-ai-authored-v4.18",
     }.get(version)
     if expected_provenance is None or any(r.provenance_ref != expected_provenance
            or r.license_ref != "original-ai-authored-internal-research; no-PhoMT-content" for r in rows):
@@ -145,7 +180,10 @@ def freeze_pilot(directory, *, epochs=40, seeds=(17, 23, 41), model_width=32,
     groups = _read(base / "groups.json")
     fractions = {name: sum(r.split_group_id in {g for g, s in groups.items() if s == name} for r in rows) / len(rows)
                  for name in ("train", "validation", "test")}
-    split_seed = {"v4.9": 20261008, "v4.10": 20261009, "v4.11": 20261010}.get(version, 20261001)
+    split_seed = {"v4.9": 20261008, "v4.10": 20261009, "v4.11": 20261010,
+                  "v4.12": 20261011, "v4.13": 20261012, "v4.14": 20261013,
+                  "v4.15": 20261015, "v4.16": 20261017,
+                  "v4.17": 20261018, "v4.18": 20261019}.get(version, 20261001)
     manifest = SplitManifest(dataset_fingerprint(approved_rows), split_seed, fractions, groups,
                              {name: tuple(sorted(r.record_id for r in rows if groups[r.split_group_id] == name))
                               for name in ("train", "validation", "test")})
@@ -179,19 +217,36 @@ def freeze_pilot(directory, *, epochs=40, seeds=(17, 23, 41), model_width=32,
     config_names = []
     root = Path(__file__).resolve().parents[1]
     for seed in seeds:
-        for mode in MODES:
-            name = f"{mode}-seed-{seed}.json"
-            config = {"corpus": "corpus.jsonl", "inventory": "inventory.json", "alignments": "alignments.json",
-                      "frozen_split": "split_manifest.json", "review_gate": "approval.json", "languages": ["en", "vi"],
-                      "output_dir": os.path.relpath(root / "runs" / base.name / f"{mode}-seed-{seed}", base),
-                      "seed": seed, "model": {"width": model_width, "heads": model_heads,
-                                                "layers": model_layers, "max_length": max_length},
-                      "objective": {"mode": mode, **({"source_copy_weight": source_copy_weight}
-                                                        if source_copy_weight else {})},
-                      "training": {"epochs": epochs, "batch_size": batch_size,
-                                                                    "learning_rate": learning_rate}}
-            _write(base / name, config)
-            config_names.append(name)
+        for mode in selected_modes:
+            for condition_weight in copy_weights:
+                mode_latent_weights = latent_weights if mode == "tide" else (1.0,)
+                for latent_weight in mode_latent_weights:
+                    for transition_balance in transition_balances:
+                        weight_slug = str(condition_weight).replace(".", "p")
+                        latent_slug = str(latent_weight).replace(".", "p")
+                        name_prefix = (f"{mode}-aux-{latent_slug}" if condition_latent_objective_weights is not None and mode == "tide"
+                                       else mode)
+                        if condition_transition_balances is not None:
+                            name_prefix += f"-balance-{transition_balance}"
+                        name = (f"{name_prefix}-copy-{weight_slug}-seed-{seed}.json" if custom_matrix
+                                else f"{name_prefix}-seed-{seed}.json")
+                        output_name = (f"{name_prefix}-copy-{weight_slug}-seed-{seed}" if custom_matrix
+                                       else f"{name_prefix}-seed-{seed}")
+                        objective_config = {"mode": mode, **({"source_copy_weight": condition_weight}
+                                                                if condition_weight else {})}
+                        if condition_latent_objective_weights is not None and mode == "tide":
+                            objective_config["latent_objective_weight"] = latent_weight
+                        config = {"corpus": "corpus.jsonl", "inventory": "inventory.json", "alignments": "alignments.json",
+                                  "frozen_split": "split_manifest.json", "review_gate": "approval.json", "languages": ["en", "vi"],
+                                  "output_dir": os.path.relpath(root / "runs" / base.name / output_name, base),
+                                  "seed": seed, "model": {"width": model_width, "heads": model_heads,
+                                                            "layers": model_layers, "max_length": max_length},
+                                  "objective": objective_config,
+                                  "training": {"epochs": epochs, "batch_size": batch_size,
+                                               "learning_rate": learning_rate,
+                                               "transition_balance": transition_balance}}
+                        _write(base / name, config)
+                        config_names.append(name)
     # Local review files are assertions, not cryptographic proof of reviewer
     # identity. Actual independent Luna dispatch/review evidence is recorded by
     # the project owner; people with write access can alter every local gate.
@@ -204,15 +259,40 @@ def freeze_pilot(directory, *, epochs=40, seeds=(17, 23, 41), model_width=32,
     package_root = Path(__file__).parent
     for name in implementation:
         shutil.copy2(package_root / name, snapshot / name)
+    primary_weights = sorted({weight for mode in selected_modes if mode == primary_mode for weight in copy_weights})
+    primary_latent_weights = sorted(set(latent_weights)) if condition_latent_objective_weights is not None else None
+    primary_transition_balances = list(transition_balances) if condition_transition_balances is not None else ["row_uniform"]
     _write(base / "protocol.json", {"schema_version": "tide-jepa-preliminary-protocol-v3", "configs": config_names,
-                                     "modes": list(MODES), "seeds": list(seeds), "epochs": epochs,
+                                     "modes": list(selected_modes), "seeds": list(seeds), "epochs": epochs,
                                      "primary_quality_mode": primary_mode,
+                                     "primary_source_copy_weights": primary_weights,
+                                     "primary_transition_balance_modes": primary_transition_balances,
+                                     "transition_balance_scope": ("base per-edge token, source-copy, JEPA, alignment, and variance losses; path-composition losses remain unweighted"
+                                                                  if condition_transition_balances is not None else "uniform record-row weighting"),
+                                     **({"release_holdout_scope": (
+                                         "Test paths reverse the action order used in train and validation "
+                                         "(TIME:PAST then POLARITY:NEGATIVE); if opened after all validation "
+                                         "gates pass, the holdout probes action-order recombination as well as "
+                                         "held-out factor combinations and is not a matched estimate of the "
+                                         "transition-weighting contrast.")}
+                                        if version == "v4.17" else {}),
+                                     **({"release_holdout_scope": (
+                                         "The release holdout uses the same ordered action paths as train and validation; "
+                                         "it probes fresh held-out factor combinations only and does not add an action-order shift.")}
+                                        if version == "v4.18" else {}),
+                                     **({"registered_hypotheses": statement["registered_hypotheses"]}
+                                        if version == "v4.18" else {}),
+                                     **({"primary_latent_objective_weights": primary_latent_weights}
+                                        if primary_latent_weights is not None else {}),
+                                     **({"latent_objective_multiplier_scope": [
+                                         "jepa", "alignment", "variance", "path_jepa", "path_alignment"]}
+                                        if primary_latent_weights is not None else {}),
                                      "approval_sha256": _hash_file(base / "approval.json"),
                                      "config_files_sha256": {name: _hash_file(base / name) for name in config_names},
                                      "implementation_sha256": implementation, "runtime": runtime,
                                      "implementation_snapshot": "implementation-snapshot/",
-                                     "checkpoint_selection": ("validation token CE + path token CE + weighted aligned-source token CE; same criterion for all modes"
-                                                               if source_copy_weight else
+                                     "checkpoint_selection": ("validation token CE + path token CE + weighted aligned-source token CE; same criterion for all conditions"
+                                                               if any(copy_weights) else
                                                                "validation token CE + path token CE; same criterion for all modes"),
                                      "test_policy": "train every registered config; all primary-seed validation generation gates must pass before opening the sealed release holdout; never tune on test",
                                      "model": {"width": model_width, "heads": model_heads, "layers": model_layers,
@@ -273,12 +353,14 @@ def _semantic_frame_flags(text, language, frame):
     """Narrow rule checker over the declared synthetic v4 grammar only."""
     from .pilot_seed import (FAMILIES_V4, FAMILIES_V42, FAMILIES_V43, FAMILIES_V44,
                              FAMILIES_V45, FAMILIES_V46, FAMILIES_V47, FAMILIES_V48,
-                             FAMILIES_V49, FAMILIES_V410, FAMILIES_V411)
+                             FAMILIES_V49, FAMILIES_V410, FAMILIES_V411, FAMILIES_V412,
+                             FAMILIES_V413, FAMILIES_V414, FAMILIES_V415, FAMILIES_V416, FAMILIES_V417)
     event = frame.get("event")
     definition = next((item for family_set in (FAMILIES_V4, FAMILIES_V42, FAMILIES_V43,
                                                FAMILIES_V44, FAMILIES_V45, FAMILIES_V46,
                                                FAMILIES_V47, FAMILIES_V48, FAMILIES_V49, FAMILIES_V410,
-                                               FAMILIES_V411)
+                                               FAMILIES_V411, FAMILIES_V412, FAMILIES_V413,
+                                               FAMILIES_V414, FAMILIES_V415, FAMILIES_V416, FAMILIES_V417)
                        for group in family_set.values() for item in group if item[0] == event), None)
     if definition is None:
         return None
@@ -287,6 +369,7 @@ def _semantic_frame_flags(text, language, frame):
     required_markers = []
     if language == "en":
         agent, patient = agent_en, patient_en
+        place = frame.get("place_en")
         progressive = frame.get("predicate_en_progressive")
         if frame["time"] == "past":
             required_markers.append("yesterday")
@@ -299,6 +382,8 @@ def _semantic_frame_flags(text, language, frame):
         else:
             verb_phrase = past if frame["time"] == "past" else present
         preservation = all(_norm_text(part) in normalized for part in (agent, patient, verb_phrase))
+        if place:
+            preservation = preservation and _norm_text(place) in normalized
         negative = "did not" in normalized or "does not" in normalized or "is not" in normalized
         other_time = "right now" if frame["time"] == "past" else "yesterday"
         action = (all(_norm_text(marker) in normalized for marker in required_markers)
@@ -306,10 +391,13 @@ def _semantic_frame_flags(text, language, frame):
                   and negative == (frame["polarity"] == "negative"))
     elif language == "vi":
         agent, patient = agent_vi, patient_vi
+        place = frame.get("place_vi")
         required_markers.append("hôm qua" if frame["time"] == "past" else "bây giờ")
         verb_phrase = ("không " + verb_vi) if frame["polarity"] == "negative" else (
             ("đã " if frame["time"] == "past" else "") + verb_vi)
         preservation = all(_norm_text(part) in normalized for part in (agent, patient, verb_phrase))
+        if place:
+            preservation = preservation and _norm_text(place) in normalized
         negative = "không" in normalized.split()
         past_positive = "đã" in normalized.split()
         other_time = "bây giờ" if frame["time"] == "past" else "hôm qua"
@@ -339,6 +427,13 @@ def _require_release_test_gate(base, protocol, manifest, rows):
             name: _hash_file(base / name) for name in config_names}:
         raise ValueError("release holdout remains sealed: registered config identity changed")
 
+    selected_primary_weights = protocol.get("primary_source_copy_weights")
+    if selected_primary_weights is not None:
+        selected_primary_weights = {float(weight) for weight in selected_primary_weights}
+    selected_primary_latent_weights = protocol.get("primary_latent_objective_weights")
+    if selected_primary_latent_weights is not None:
+        selected_primary_latent_weights = {float(weight) for weight in selected_primary_latent_weights}
+    selected_primary_balances = set(protocol.get("primary_transition_balance_modes", ["row_uniform"]))
     primary_configs = []
     for name in config_names:
         config = _read(base / name)
@@ -354,10 +449,33 @@ def _require_release_test_gate(base, protocol, manifest, rows):
                 or latest.get("run_sha256") != resolved.get("run_sha256")
                 or best.get("run_sha256") != resolved.get("run_sha256")):
             raise ValueError("release holdout remains sealed: a registered run is incomplete or has mixed checkpoints")
-        if config.get("objective", {}).get("mode") == primary:
+        condition_weight = config.get("objective", {}).get("source_copy_weight", 0.0)
+        latent_weight = config.get("objective", {}).get("latent_objective_weight", 1.0)
+        transition_balance = config.get("training", {}).get("transition_balance", "row_uniform")
+        if (config.get("objective", {}).get("mode") == primary
+                and (selected_primary_weights is None or condition_weight in selected_primary_weights)
+                and (selected_primary_latent_weights is None or latent_weight in selected_primary_latent_weights)
+                and transition_balance in selected_primary_balances):
             primary_configs.append((name, config, output, resolved))
-    if len(primary_configs) != len(seeds) or {cfg.get("seed") for _, cfg, _, _ in primary_configs} != set(seeds):
-        raise ValueError("release holdout remains sealed: one primary run per frozen seed is required")
+    primary_weights = (selected_primary_weights if selected_primary_weights is not None else
+                       {cfg.get("objective", {}).get("source_copy_weight", 0.0)
+                        for _, cfg, _, _ in primary_configs})
+    if selected_primary_latent_weights is None:
+        expected_primary = {(seed, weight, balance) for seed in seeds for weight in primary_weights
+                            for balance in selected_primary_balances}
+        actual_primary = {(cfg.get("seed"), cfg.get("objective", {}).get("source_copy_weight", 0.0),
+                           cfg.get("training", {}).get("transition_balance", "row_uniform"))
+                          for _, cfg, _, _ in primary_configs}
+    else:
+        expected_primary = {(seed, weight, latent_weight, balance) for seed in seeds for weight in primary_weights
+                            for latent_weight in selected_primary_latent_weights
+                            for balance in selected_primary_balances}
+        actual_primary = {(cfg.get("seed"), cfg.get("objective", {}).get("source_copy_weight", 0.0),
+                           cfg.get("objective", {}).get("latent_objective_weight", 1.0),
+                           cfg.get("training", {}).get("transition_balance", "row_uniform"))
+                          for _, cfg, _, _ in primary_configs}
+    if len(primary_configs) != len(expected_primary) or actual_primary != expected_primary:
+        raise ValueError("release holdout remains sealed: primary runs do not cover every frozen seed/objective dose")
 
     expected_buckets = set()
     held_out = [row for row in rows if manifest.groups[row.split_group_id] == "validation"]
@@ -634,6 +752,11 @@ def main():
     parser.add_argument("--learning-rate", type=float, default=0.001)
     parser.add_argument("--primary-mode", choices=MODES, default="tide")
     parser.add_argument("--source-copy-weight", type=float, default=0.0)
+    parser.add_argument("--condition-modes", nargs="+", choices=MODES)
+    parser.add_argument("--condition-source-copy-weights", nargs="+", type=float)
+    parser.add_argument("--condition-latent-objective-weights", nargs="+", type=float)
+    parser.add_argument("--condition-transition-balances", nargs="+",
+                        choices=("row_uniform", "unique_transition"))
     parser.add_argument("--evaluation-split", choices=("validation", "test"), default="validation")
     parser.add_argument("--resume", action="store_true")
     args = parser.parse_args()
@@ -641,7 +764,11 @@ def main():
         result = freeze_pilot(args.directory, epochs=args.epochs, model_width=args.model_width,
                               model_heads=args.model_heads, model_layers=args.model_layers,
                               batch_size=args.batch_size, learning_rate=args.learning_rate,
-                              primary_mode=args.primary_mode, source_copy_weight=args.source_copy_weight)
+                              primary_mode=args.primary_mode, source_copy_weight=args.source_copy_weight,
+                              condition_modes=args.condition_modes,
+                              condition_source_copy_weights=args.condition_source_copy_weights,
+                              condition_latent_objective_weights=args.condition_latent_objective_weights,
+                              condition_transition_balances=args.condition_transition_balances)
     elif args.command == "run":
         result = run_suite(args.directory, resume=args.resume)
     else:

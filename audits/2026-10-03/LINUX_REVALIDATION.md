@@ -5,7 +5,7 @@ This report adds current-host evidence to the historical 2026-10-02 audit. It do
 ## Runtime and reproducibility evidence
 
 - Host runtime: Linux `7.2.8-arch1-2`, `x86_64`; Python `3.11.17`; PyTorch `2.14.0+cpu`; CUDA unavailable; six Torch CPU threads.
-- `.venv/bin/python -B -m unittest discover -s tests -v`: 73 tests passed, 0 skipped, 8.582 seconds. The suite includes the loopback demo test, CPU tensor tests, release-holdout gate refusal, and v4.9/v4.10/v4.11 draft split/frame checks. PyTorch emitted a warning that NumPy is not installed; no test failed or was skipped because of it.
+- `.venv/bin/python -B -m unittest discover -s tests -v`: 77 tests passed, 0 skipped. The suite includes the loopback demo test, CPU tensor tests, release-holdout gate refusal, and v4.9–v4.13 draft split/frame checks. PyTorch emitted a warning that NumPy is not installed; no test failed or was skipped because of it.
 - `.venv/bin/python -m compileall -q tide_jepa tests audits/2026-10-02/root_probes.py`: passed.
 - `.venv/bin/python -m pip check`: no broken requirements.
 - `git diff --check`: passed.
@@ -19,7 +19,7 @@ This report adds current-host evidence to the historical 2026-10-02 audit. It do
 
 | ID | Current status | Linux evidence / remaining scope |
 |---|---|---|
-| E01 | Closed for covered metric aggregation | Metric-denominator regression is included in the 73-test suite. |
+| E01 | Closed for covered metric aggregation | Metric-denominator regression is included in the 77-test suite. |
 | E02 | Closed for covered recovery paths | Crash/recovery regression and this run's synthetic root probe pass; not an exhaustive process-kill matrix. |
 | E03 | Closed for covered identity drift | Frozen identity tests and probe reject modified corpus/review identity before evaluation. |
 | E04 | Closed for tested leakage cases | Fresh/frozen split leakage checks pass in the full suite. |
@@ -30,10 +30,10 @@ This report adds current-host evidence to the historical 2026-10-02 audit. It do
 | E09 | Closed for exact generation argument validation | Invalid EOS/budget and generation checks pass. |
 | E10 | Closed for direct encoder padding contract | Left-padding rejection test passes. |
 | E11 | Closed for tested schema index validation | Exact-integer edge/pair schema checks pass. |
-| E12 | Closed for covered local API requests | Loopback HTTP test and 73-test suite pass; no soak test or adversarial socket-read test was run. |
+| E12 | Closed for covered local API requests | Loopback HTTP test and 77-test suite pass; no soak test or adversarial socket-read test was run. |
 | E13 | Closed for declared same-language inference contract | Inference identity and request tests pass; cross-language translation remains unsupported. |
 | E14 | Partially closed | Interacted with the current demo UI in a local browser using a mock generator: the failed-gate banner, request summary, diagnostic response, and provenance warning displayed correctly. The real trained-checkpoint demo and delayed/stale-response behavior remain unverified. |
-| Q01 | Open; blocks completion | v4.8 has no Linux artifacts on this host, and no validation or release-holdout result exists. Do not open its holdout. Neural output quality remains unestablished. |
+| Q01 | Open; blocks completion | v4.8 has no Linux artifacts on this host. v4.10–v4.13 synthetic validation gates fail; all release holdouts remain sealed. v4.13 has no passing single-action bucket. Neural output quality remains unestablished. |
 | G01 | Partially closed | Linux OS/Python/Torch, complete CPU suite, compileall and pip check are recorded here. Clean bootstrap is unverified. |
 | G02 | Closed for current reporting contract | Aggregate report validator and synthetic/report tests pass; no new model report was generated. |
 | G03 | Closed for the recorded documentation snapshot | Existing docs preserve preliminary AI provenance and failed prior gates; this dated report records new Linux evidence without editing raw history. |
@@ -61,4 +61,37 @@ A fresh v4.10 corpus under ignored `data/pilot/vi-en-ai-v4.10/` has 7,680 record
 
 After v4.10 evaluation, the offline demo was updated to read validation status from its selected checkpoint and show a versioned diagnostic banner instead of the stale hard-coded v4.2 result. The browser flow was checked with a mock response and clearly labels it diagnostic; it was not a trained-model demonstration. This source edit changes implementation identity, so v4.10 remains a completed historical result and must not be resumed or rescored with current code. A new version is required for subsequent experiments.
 
-The v4.10 validation gate failed on single-action preservation, with all 12 frozen runs and validation reports complete. A new v4.11 draft (7,680 synthetic records, 112/40/40 split, three new agent factors) is under ignored `data/pilot/vi-en-ai-v4.11/`. Its copy-supervision weight is set to 1.5 as an unverified hypothesis, not an improvement claim. Two independent `gpt-6-luna` high reviews approved the exact draft; artifact-bound review and adjudication records were written locally. The frozen 12-run 58-epoch protocol completed training, and every run passed config/protocol/runtime/checkpoint identity checks. Validation-only evaluation is running; its release holdout remains sealed. See [v4.11 status](../../VI_EN_RESULTS_V4.11_STATUS.md). The updated 73-test suite, including v4.11 split/grammar regression, passes.
+The v4.10 validation gate failed on single-action preservation, with all 12 frozen runs and validation reports complete. v4.11 used a fresh draft and the preregistered source-copy weight 1.5; its 12-run protocol and validation-only evaluation completed, but every TIDE seed failed the single-action preservation gate. Its release holdout remains sealed. See [v4.11 status](../../VI_EN_RESULTS_V4.11_STATUS.md) and [aggregate report](../../VI_EN_RESULTS_V4.11_VALIDATION.md).
+
+The v4.12 fresh draft was independently approved by two `gpt-6-luna` high reviewers and frozen as a matched 2×2 comparison (`token_only`/`tide` × source-copy weights 0/1.5) across seeds 17/23/41. All 12 runs completed 58 epochs / 3,248 updates with config, protocol, runtime, and checkpoint identities matching. Validation-only generation failed both TIDE weight conditions across the three seeds. Weight 1.5 improved preservation relative to 0, especially for English, but multiple single-action buckets remained below 90%; Unicode and EOS were 100%, and held-out-path buckets met their lower threshold. The direct release-test request was refused before test scoring and no release-test metrics exist. See [v4.12 status](../../VI_EN_RESULTS_V4.12_STATUS.md) and [aggregate report](../../VI_EN_RESULTS_V4.12_VALIDATION.md). The holdout remains sealed; no PhoMT or Cham data was used.
+
+## v4.13 result — 2026-10-04
+
+The fresh v4.13 dose-response pilot completed all 12 registered runs at 58 epochs / 3,248 steps. Config hashes, runtime/implementation identities, and latest/best/resolved checkpoint run identities matched. Validation-only generation completed; the aggregate-only report is [VI_EN_RESULTS_V4.13_VALIDATION.md](../../VI_EN_RESULTS_V4.13_VALIDATION.md). Only 10 of 60 seed-by-bucket checks passed, including one single-action bucket. The other 47/48 single-action buckets missed the 90% preservation gate; three path buckets also failed, while 9/12 paths met their 80% gate. Unicode and EOS were 100%. Pooled preservation favored the matched token-only controls at both weights, though individual buckets and other metrics varied. Each seed reuses the same validation groups, so these counts are operational, not independent linguistic observations; the benchmark has no human confidence intervals or language validation.
+
+The direct release-test API refused scoring before generating test output because bound validation gates failed. No test metrics or test-generation files exist; holdout remains sealed. The report is preliminary AI-reviewed synthetic evidence and does not support a usable natural-language claim. PhoMT and Cham were not used. Two independent Luna agents separately reviewed aggregate results only and recommended preserving failures while considering fresh data/context diversity or objective-balance hypotheses in a new, preregistered version; no threshold or holdout should be altered.
+
+## Linux follow-up — 2026-10-04
+
+After adding the v4.14 four-form authoring path and invariant-place semantic check, `.venv/bin/python -B -m unittest discover -s tests -v` passed 78/78 with no skips; compileall, `pip check`, and `git diff --check` passed. PyTorch warned NumPy is unavailable; tensor tests still ran and passed. Two independent `gpt-6-luna` high reviewers approved the corrected v4.14-r1 draft, after both rejected its first draft for confounding context that changed with tense. The corrected 15,360-row corpus has a fresh 112/40/40 event-group split, invariants recorded in its frames, and a fresh release holdout. All six matched CPU runs completed at 29 epochs / 3,248 updates, and validation-only generation completed. The frozen TIDE gate failed: 4/30 seed-by-bucket checks passed (all four held-out paths); all 24 single-action checks failed. Four of six path checks passed; Unicode and EOS were 100%. Token-only preservation was higher in every pooled bucket. The holdout remains sealed; inspection found no test metrics or generated test files. Two independent Luna agents read only aggregate reports and recommended an objective/loss contribution audit before another fresh, preregistered ablation. See [v4.14 status](../../VI_EN_RESULTS_V4.14_STATUS.md) and the [aggregate report](../../VI_EN_RESULTS_V4.14_VALIDATION.md).
+
+
+## 2026-10-04 follow-up — v4.15 completion and v4.16 start
+
+The full Linux CPU suite now passes 83/83 with no skips. Its loopback demo test requires binding to `127.0.0.1`; the sandboxed invocation was denied by the environment, then the same suite passed when run with host loopback access. `compileall`, `pip check`, and `git diff --check` pass. PyTorch continues to warn that NumPy is unavailable; the tensor tests ran and passed.
+
+v4.15 completed all nine registered 29-epoch runs and validation-only generation. Its TIDE gate failed (3/60 seed-by-bucket checks passed; no single-action bucket passed preservation), and its fresh release holdout remains sealed. Aggregate report: [v4.15 validation](../../VI_EN_RESULTS_V4.15_VALIDATION.md).
+
+v4.16-r2 was approved by two independent aggregate-only Luna reviews and frozen to protocol SHA-256 `f24214a9582268b0ccea2a5547a79b46aefdfcad48d0ca894de2c06df9338dc0`. The nine registered runs compare token-only with TIDE latent-objective multipliers 0.1/0.25, source-copy weight 1.5, three seeds, and 29 epochs. All nine runs completed at 3,248 updates; config hashes, resolved config, Python/PyTorch runtime identity, and `best.pt`/`latest.pt` presence match. Validation-only evaluation has now started. No release-holdout evaluation has occurred. See [v4.16 status](../../VI_EN_RESULTS_V4.16_STATUS.md).
+
+
+## 2026-10-05 follow-up — v4.17-r2 validation and next study
+
+The current full Linux CPU suite passes 90/90 with no skips; `.venv/bin/python -B -m compileall -q tide_jepa tests`, `.venv/bin/python -B -m pip check`, and `git diff --check` pass. Runtime remains Python 3.11.17 and PyTorch 2.14.0+cpu; NumPy is absent, and tensor tests did not skip.
+
+v4.17-r2 completed all 12 frozen 29-epoch runs (3,248 updates each) and validation-only generation. Run/protocol/config/runtime/checkpoint identities and 29 train + 29 validation metric rows per run were verified before evaluation. The frozen TIDE gate failed all 60/60 seed × transition-balance × language/task checks. Unicode and EOS were 100%; pooled preservation was 1.44% with row-uniform and 1.12% with unique-transition weighting. The release holdout remains sealed and no test metrics or generations exist. Two independent Luna reviewers read aggregate evidence only; their interpretation is descriptive and preliminary. The aggregate report now includes explicit numeric thresholds and failure reasons. See [v4.17 status](../../VI_EN_RESULTS_V4.17_STATUS.md) and [validation report](../../VI_EN_RESULTS_V4.17_VALIDATION.md).
+
+No PhoMT raw/derived rows or Cham data were used. The next proposed v4.18 is a new synthetic corpus and split, with a frozen 2×2 TIDE auxiliary multiplier (0/0.1) × source-copy supervision (0/1.5), fixed unique-transition weighting, and three seeds. It must be reviewed and frozen before any training; the release holdout stays unopened unless every validation gate passes.
+
+
+v4.18 received two independent Luna high preliminary approvals and was frozen to protocol SHA-256 `278cefdd57da675211a1a9312701f6892a9d0bcdea14384bc73e35122bb3bb5e`. The 12-config TIDE factorial crosses source-copy weights 0/1.5 with TIDE auxiliary multipliers 0/0.1 across seeds 17/23/41; unique-transition weighting, 29 epochs, and the v4.17 architecture/budget are fixed. All runs completed and identities were verified before validation-only generation. Every primary condition × seed × bucket failed: action fidelity and preservation were 0%, while Unicode/EOS were 100%. The release holdout remains sealed, with no test evaluation. See [v4.18 status](../../VI_EN_RESULTS_V4.18_STATUS.md) and [aggregate report](../../VI_EN_RESULTS_V4.18_VALIDATION.md).

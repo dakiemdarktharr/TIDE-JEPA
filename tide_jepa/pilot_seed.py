@@ -91,6 +91,8 @@ def author_seed(output_dir):
             event, *texts = family
             group = f"authored-{event}"
             groups[group] = split
+            # Test paths intentionally reverse the action order used in train
+            # and validation; v4.17 discloses this as a secondary holdout axis.
             path_edges = ([(0, 2, "TIME", "PAST"), (2, 3, "POLARITY", "NEGATIVE")]
                           if split == "test" else
                           [(0, 1, "POLARITY", "NEGATIVE"), (1, 3, "TIME", "PAST")])
@@ -242,6 +244,13 @@ _V44_PATIENTS = (
 _V49_AGENTS = (("Kieu", "Kiều"), ("Thien", "Thiện"), ("Oanh", "Oanh"))
 _V410_AGENTS = (("Nhu", "Như"), ("Tuyen", "Tuyền"), ("Loc", "Lộc"))
 _V411_AGENTS = (("Kha My", "Khả My"), ("Tuan Kiet", "Tuấn Kiệt"), ("An Vy", "An Vy"))
+_V412_AGENTS = (("My Dung", "Mỹ Dung"), ("Quoc Bao", "Quốc Bảo"), ("Thao Nhi", "Thảo Nhi"))
+_V413_AGENTS = (("Bao Tram", "Bảo Trâm"), ("Huu Phuoc", "Hữu Phước"), ("Gia Han", "Gia Hân"))
+_V414_AGENTS = (("Ngoc Mai", "Ngọc Mai"), ("Tuan Anh", "Tuấn Anh"), ("Khanh Vy", "Khánh Vy"))
+_V415_AGENTS = (("Bao Nguyen", "Bảo Nguyễn"), ("Mai Pham", "Mai Phạm"), ("Duc Tran", "Đức Trần"))
+_V416_AGENTS = (("Quoc Minh", "Quốc Minh"), ("Linh Chi", "Linh Chi"), ("Thanh Binh", "Thanh Bình"))
+_V417_AGENTS = (("Hai Yen", "Hải Yến"), ("Tuan Kiet", "Tuấn Kiệt"), ("Nhu Quynh", "Như Quỳnh"))
+_V418_AGENTS = (("Minh Tam", "Minh Tâm"), ("Bao Chau", "Bảo Châu"), ("Le Anh", "Lê Anh"))
 
 
 def _compose_v44_families():
@@ -611,6 +620,328 @@ def _compose_v411_families():
 FAMILIES_V411 = _compose_v411_families()
 
 
+def _compose_v412_families():
+    """Author a fresh factor pool for the copy-loss ablation and new holdout."""
+    import random
+
+    agents = _V44_AGENTS + _V49_AGENTS + _V410_AGENTS + _V411_AGENTS + _V412_AGENTS
+    remaining = [(agent, verb, patient)
+                 for agent in range(17, 20) for verb in range(8) for patient in range(8)]
+    train = []
+    pair_sets = (set(), set(), set())
+    while len(train) < 112:
+        best = max(
+            remaining,
+            key=lambda triple: (
+                sum(pair not in known for pair, known in zip(
+                    ((triple[0], triple[1]), (triple[0], triple[2]), (triple[1], triple[2])),
+                    pair_sets)),
+                tuple(-value for value in triple)),
+        )
+        train.append(best)
+        remaining.remove(best)
+        for pair, known in zip(((best[0], best[1]), (best[0], best[2]),
+                                (best[1], best[2])), pair_sets):
+            known.add(pair)
+    if any(not all(pair in known for pair, known in zip(
+            ((triple[0], triple[1]), (triple[0], triple[2]), (triple[1], triple[2])), pair_sets))
+           for triple in remaining):
+        raise ValueError("v4.12 held-out triples must reuse only training-seen factor pairs")
+    random.Random(20261011).shuffle(remaining)
+    validation, test = remaining[:40], remaining[40:80]
+
+    result = {"train": [], "validation": [], "test": []}
+    for split, combinations in (("train", train), ("validation", validation), ("test", test)):
+        for agent, verb, patient in combinations:
+            agent_en, agent_vi = agents[agent]
+            base, present, past, verb_vi = _V44_VERBS[verb]
+            patient_en, patient_vi = _V44_PATIENTS[patient]
+            event = f"compose412_{agent}_{verb}_{patient}"
+            result[split].append((event, agent_en, base, present, past,
+                                  patient_en, agent_vi, verb_vi, patient_vi))
+    return result
+
+
+FAMILIES_V412 = _compose_v412_families()
+
+
+def _compose_v413_families():
+    """Author fresh agent combinations for a copy-loss dose-response pilot."""
+    import random
+
+    agents = (_V44_AGENTS + _V49_AGENTS + _V410_AGENTS + _V411_AGENTS
+              + _V412_AGENTS + _V413_AGENTS)
+    remaining = [(agent, verb, patient)
+                 for agent in range(20, 23) for verb in range(8) for patient in range(8)]
+    train = []
+    pair_sets = (set(), set(), set())
+    while len(train) < 112:
+        best = max(
+            remaining,
+            key=lambda triple: (
+                sum(pair not in known for pair, known in zip(
+                    ((triple[0], triple[1]), (triple[0], triple[2]), (triple[1], triple[2])),
+                    pair_sets)),
+                tuple(-value for value in triple)),
+        )
+        train.append(best)
+        remaining.remove(best)
+        for pair, known in zip(((best[0], best[1]), (best[0], best[2]),
+                                (best[1], best[2])), pair_sets):
+            known.add(pair)
+    if any(not all(pair in known for pair, known in zip(
+            ((triple[0], triple[1]), (triple[0], triple[2]), (triple[1], triple[2])), pair_sets))
+           for triple in remaining):
+        raise ValueError("v4.13 held-out triples must reuse only training-seen factor pairs")
+    random.Random(20261012).shuffle(remaining)
+    validation, test = remaining[:40], remaining[40:80]
+
+    result = {"train": [], "validation": [], "test": []}
+    for split, combinations in (("train", train), ("validation", validation), ("test", test)):
+        for agent, verb, patient in combinations:
+            agent_en, agent_vi = agents[agent]
+            base, present, past, verb_vi = _V44_VERBS[verb]
+            patient_en, patient_vi = _V44_PATIENTS[patient]
+            event = f"compose413_{agent}_{verb}_{patient}"
+            result[split].append((event, agent_en, base, present, past,
+                                  patient_en, agent_vi, verb_vi, patient_vi))
+    return result
+
+
+FAMILIES_V413 = _compose_v413_families()
+
+
+def _compose_v414_families():
+    """Use a fresh agent pool and split for the balanced-context pilot."""
+    import random
+
+    agents = (_V44_AGENTS + _V49_AGENTS + _V410_AGENTS + _V411_AGENTS
+              + _V412_AGENTS + _V413_AGENTS + _V414_AGENTS)
+    remaining = [(agent, verb, patient)
+                 for agent in range(23, 26) for verb in range(8) for patient in range(8)]
+    train = []
+    pair_sets = (set(), set(), set())
+    while len(train) < 112:
+        best = max(
+            remaining,
+            key=lambda triple: (
+                sum(pair not in known for pair, known in zip(
+                    ((triple[0], triple[1]), (triple[0], triple[2]), (triple[1], triple[2])),
+                    pair_sets)),
+                tuple(-value for value in triple)),
+        )
+        train.append(best)
+        remaining.remove(best)
+        for pair, known in zip(((best[0], best[1]), (best[0], best[2]),
+                                (best[1], best[2])), pair_sets):
+            known.add(pair)
+    if any(not all(pair in known for pair, known in zip(
+            ((triple[0], triple[1]), (triple[0], triple[2]), (triple[1], triple[2])), pair_sets))
+           for triple in remaining):
+        raise ValueError("v4.14 held-out triples must reuse only training-seen factor pairs")
+    random.Random(20261013).shuffle(remaining)
+    validation, test = remaining[:40], remaining[40:80]
+
+    result = {"train": [], "validation": [], "test": []}
+    for split, combinations in (("train", train), ("validation", validation), ("test", test)):
+        for agent, verb, patient in combinations:
+            agent_en, agent_vi = agents[agent]
+            base, present, past, verb_vi = _V44_VERBS[verb]
+            patient_en, patient_vi = _V44_PATIENTS[patient]
+            event = f"compose414_{agent}_{verb}_{patient}"
+            result[split].append((event, agent_en, base, present, past,
+                                  patient_en, agent_vi, verb_vi, patient_vi))
+    return result
+
+
+FAMILIES_V414 = _compose_v414_families()
+
+
+def _compose_v415_families():
+    """Use a fresh agent pool while preserving v4.14's balanced surface design."""
+    import random
+
+    agents = (_V44_AGENTS + _V49_AGENTS + _V410_AGENTS + _V411_AGENTS
+              + _V412_AGENTS + _V413_AGENTS + _V414_AGENTS + _V415_AGENTS)
+    remaining = [(agent, verb, patient)
+                 for agent in range(26, 29) for verb in range(8) for patient in range(8)]
+    train = []
+    pair_sets = (set(), set(), set())
+    while len(train) < 112:
+        best = max(
+            remaining,
+            key=lambda triple: (
+                sum(pair not in known for pair, known in zip(
+                    ((triple[0], triple[1]), (triple[0], triple[2]), (triple[1], triple[2])),
+                    pair_sets)),
+                tuple(-value for value in triple)),
+        )
+        train.append(best)
+        remaining.remove(best)
+        for pair, known in zip(((best[0], best[1]), (best[0], best[2]),
+                                (best[1], best[2])), pair_sets):
+            known.add(pair)
+    if any(not all(pair in known for pair, known in zip(
+            ((triple[0], triple[1]), (triple[0], triple[2]), (triple[1], triple[2])), pair_sets))
+           for triple in remaining):
+        raise ValueError("v4.15 held-out triples must reuse only training-seen factor pairs")
+    random.Random(20261015).shuffle(remaining)
+    validation, test = remaining[:40], remaining[40:80]
+
+    result = {"train": [], "validation": [], "test": []}
+    for split, combinations in (("train", train), ("validation", validation), ("test", test)):
+        for agent, verb, patient in combinations:
+            agent_en, agent_vi = agents[agent]
+            base, present, past, verb_vi = _V44_VERBS[verb]
+            patient_en, patient_vi = _V44_PATIENTS[patient]
+            event = f"compose415_{agent}_{verb}_{patient}"
+            result[split].append((event, agent_en, base, present, past,
+                                  patient_en, agent_vi, verb_vi, patient_vi))
+    return result
+
+
+FAMILIES_V415 = _compose_v415_families()
+
+
+def _compose_v416_families():
+    """Use fresh agent factors for a lower latent-objective-dose study."""
+    import random
+
+    agents = (_V44_AGENTS + _V49_AGENTS + _V410_AGENTS + _V411_AGENTS
+              + _V412_AGENTS + _V413_AGENTS + _V414_AGENTS + _V415_AGENTS + _V416_AGENTS)
+    remaining = [(agent, verb, patient)
+                 for agent in range(29, 32) for verb in range(8) for patient in range(8)]
+    train = []
+    pair_sets = (set(), set(), set())
+    while len(train) < 112:
+        best = max(
+            remaining,
+            key=lambda triple: (
+                sum(pair not in known for pair, known in zip(
+                    ((triple[0], triple[1]), (triple[0], triple[2]), (triple[1], triple[2])),
+                    pair_sets)),
+                tuple(-value for value in triple)),
+        )
+        train.append(best)
+        remaining.remove(best)
+        for pair, known in zip(((best[0], best[1]), (best[0], best[2]),
+                                (best[1], best[2])), pair_sets):
+            known.add(pair)
+    if any(not all(pair in known for pair, known in zip(
+            ((triple[0], triple[1]), (triple[0], triple[2]), (triple[1], triple[2])), pair_sets))
+           for triple in remaining):
+        raise ValueError("v4.16 held-out triples must reuse only training-seen factor pairs")
+    random.Random(20261017).shuffle(remaining)
+    validation, test = remaining[:40], remaining[40:80]
+
+    result = {"train": [], "validation": [], "test": []}
+    for split, combinations in (("train", train), ("validation", validation), ("test", test)):
+        for agent, verb, patient in combinations:
+            agent_en, agent_vi = agents[agent]
+            base, present, past, verb_vi = _V44_VERBS[verb]
+            patient_en, patient_vi = _V44_PATIENTS[patient]
+            event = f"compose416_{agent}_{verb}_{patient}"
+            result[split].append((event, agent_en, base, present, past,
+                                  patient_en, agent_vi, verb_vi, patient_vi))
+    return result
+
+
+FAMILIES_V416 = _compose_v416_families()
+
+
+def _compose_v417_families():
+    """Use fresh agent factors for a preregistered row-exposure balance study."""
+    import random
+
+    agents = (_V44_AGENTS + _V49_AGENTS + _V410_AGENTS + _V411_AGENTS
+              + _V412_AGENTS + _V413_AGENTS + _V414_AGENTS + _V415_AGENTS
+              + _V416_AGENTS + _V417_AGENTS)
+    remaining = [(agent, verb, patient)
+                 for agent in range(32, 35) for verb in range(8) for patient in range(8)]
+    train = []
+    pair_sets = (set(), set(), set())
+    while len(train) < 112:
+        best = max(
+            remaining,
+            key=lambda triple: (
+                sum(pair not in known for pair, known in zip(
+                    ((triple[0], triple[1]), (triple[0], triple[2]), (triple[1], triple[2])),
+                    pair_sets)),
+                tuple(-value for value in triple)),
+        )
+        train.append(best)
+        remaining.remove(best)
+        for pair, known in zip(((best[0], best[1]), (best[0], best[2]),
+                                (best[1], best[2])), pair_sets):
+            known.add(pair)
+    if any(not all(pair in known for pair, known in zip(
+            ((triple[0], triple[1]), (triple[0], triple[2]), (triple[1], triple[2])), pair_sets))
+           for triple in remaining):
+        raise ValueError("v4.17 held-out triples must reuse only training-seen factor pairs")
+    random.Random(20261018).shuffle(remaining)
+    validation, test = remaining[:40], remaining[40:80]
+    result = {"train": [], "validation": [], "test": []}
+    for split, combinations in (("train", train), ("validation", validation), ("test", test)):
+        for agent, verb, patient in combinations:
+            agent_en, agent_vi = agents[agent]
+            base, present, past, verb_vi = _V44_VERBS[verb]
+            patient_en, patient_vi = _V44_PATIENTS[patient]
+            event = f"compose417_{agent}_{verb}_{patient}"
+            result[split].append((event, agent_en, base, present, past,
+                                  patient_en, agent_vi, verb_vi, patient_vi))
+    return result
+
+
+FAMILIES_V417 = _compose_v417_families()
+
+
+def _compose_v418_families():
+    """Use fresh agent factors and a matched path order for the 2x2 objective study."""
+    import random
+
+    agents = (_V44_AGENTS + _V49_AGENTS + _V410_AGENTS + _V411_AGENTS
+              + _V412_AGENTS + _V413_AGENTS + _V414_AGENTS + _V415_AGENTS
+              + _V416_AGENTS + _V417_AGENTS + _V418_AGENTS)
+    remaining = [(agent, verb, patient)
+                 for agent in range(35, 38) for verb in range(8) for patient in range(8)]
+    train = []
+    pair_sets = (set(), set(), set())
+    while len(train) < 112:
+        best = max(
+            remaining,
+            key=lambda triple: (
+                sum(pair not in known for pair, known in zip(
+                    ((triple[0], triple[1]), (triple[0], triple[2]), (triple[1], triple[2])),
+                    pair_sets)),
+                tuple(-value for value in triple)),
+        )
+        train.append(best)
+        remaining.remove(best)
+        for pair, known in zip(((best[0], best[1]), (best[0], best[2]),
+                                (best[1], best[2])), pair_sets):
+            known.add(pair)
+    if any(not all(pair in known for pair, known in zip(
+            ((triple[0], triple[1]), (triple[0], triple[2]), (triple[1], triple[2])), pair_sets))
+           for triple in remaining):
+        raise ValueError("v4.18 held-out triples must reuse only training-seen factor pairs")
+    random.Random(20261019).shuffle(remaining)
+    validation, test = remaining[:40], remaining[40:80]
+
+    result = {"train": [], "validation": [], "test": []}
+    for split, combinations in (("train", train), ("validation", validation), ("test", test)):
+        for agent, verb, patient in combinations:
+            agent_en, agent_vi = agents[agent]
+            base, present, past, verb_vi = _V44_VERBS[verb]
+            patient_en, patient_vi = _V44_PATIENTS[patient]
+            event = f"compose418_{agent}_{verb}_{patient}"
+            result[split].append((event, agent_en, base, present, past,
+                                  patient_en, agent_vi, verb_vi, patient_vi))
+    return result
+
+
+FAMILIES_V418 = _compose_v418_families()
+
+
 def author_seed_v4(output_dir, *, version="v4"):
     """Create a new AI-authored v4-family draft with explicit bilingual frames."""
     output = Path(output_dir)
@@ -627,6 +958,13 @@ def author_seed_v4(output_dir, *, version="v4"):
                   FAMILIES_V43 if version == "v4.3" else
                   FAMILIES_V44 if version == "v4.4" else
                   FAMILIES_V45 if version == "v4.5" else
+                  FAMILIES_V414 if version == "v4.14" else
+                  FAMILIES_V418 if version == "v4.18" else
+                  FAMILIES_V417 if version == "v4.17" else
+                  FAMILIES_V416 if version == "v4.16" else
+                  FAMILIES_V415 if version == "v4.15" else
+                  FAMILIES_V413 if version == "v4.13" else
+                  FAMILIES_V412 if version == "v4.12" else
                   FAMILIES_V411 if version == "v4.11" else
                   FAMILIES_V410 if version == "v4.10" else
                   FAMILIES_V49 if version == "v4.9" else
@@ -648,16 +986,19 @@ def author_seed_v4(output_dir, *, version="v4"):
                          "predicate_en_present": en_present, "predicate_en_past": en_past,
                          "patient_en": en_patient, "patient_vi": vi_patient,
                          "context": "same event; requested action changes time or polarity only"}
-                if version in ("v4.6", "v4.7", "v4.8", "v4.9", "v4.10", "v4.11"):
+                if version in ("v4.14", "v4.15", "v4.16", "v4.17", "v4.18"):
+                    frame.update({"place_en": "in the workshop", "place_vi": "trong xưởng",
+                                  "context": "same event in the same workshop; only time or polarity changes"})
+                if version in ("v4.6", "v4.7", "v4.8", "v4.9", "v4.10", "v4.11", "v4.12", "v4.13", "v4.14", "v4.15", "v4.16", "v4.17", "v4.18"):
                     frame["predicate_en_progressive"] = _V46_PROGRESSIVE[en_base]
                 frames[f"{group}-state-{index}"] = frame
             path_edges = ([(0, 2, "TIME", "PAST"), (2, 3, "POLARITY", "NEGATIVE")]
-                          if split == "test" else
+                          if split == "test" and version == "v4.17" else
                           [(0, 1, "POLARITY", "NEGATIVE"), (1, 3, "TIME", "PAST")])
             for language in ("en", "vi"):
-                for variant in range(2):
+                for variant in range(4 if version in ("v4.14", "v4.15", "v4.16", "v4.17", "v4.18") else 2):
                     state_forms_v4_6 = None
-                    if version in ("v4.6", "v4.7", "v4.8", "v4.9", "v4.10", "v4.11"):
+                    if version in ("v4.6", "v4.7", "v4.8", "v4.9", "v4.10", "v4.11", "v4.12", "v4.13", "v4.14", "v4.15", "v4.16", "v4.17", "v4.18"):
                         progressive = _V46_PROGRESSIVE[en_base]
                         state_forms_v4_6 = {
                             "en": ((f"Right now, {en_agent} is {progressive} {en_patient}.",
@@ -669,16 +1010,54 @@ def author_seed_v4(output_dir, *, version="v4"):
                                    (f"Bây giờ, {vi_agent} không {vi_verb} {vi_patient}.",
                                     f"{vi_agent} không {vi_verb} {vi_patient} bây giờ.")),
                         }
-                    realized = [state[language][variant] for state in
-                                [{"en": (f"Right now, {en_agent} {en_present} {en_patient}.", f"{en_agent} {en_present} {en_patient} right now."),
-                                  "vi": (f"Bây giờ, {vi_agent} {vi_verb} {vi_patient}.", f"{vi_agent} {vi_verb} {vi_patient} bây giờ.")},
-                                 {"en": (f"Right now, {en_agent} does not {en_base} {en_patient}.", f"{en_agent} does not {en_base} {en_patient} right now."),
-                                  "vi": (f"Bây giờ, {vi_agent} không {vi_verb} {vi_patient}.", f"{vi_agent} không {vi_verb} {vi_patient} bây giờ.")},
-                                 {"en": (f"Yesterday, {en_agent} {en_past} {en_patient}.", f"{en_agent} {en_past} {en_patient} yesterday."),
-                                  "vi": (f"Hôm qua, {vi_agent} đã {vi_verb} {vi_patient}.", f"{vi_agent} đã {vi_verb} {vi_patient} hôm qua.")},
-                                 {"en": (f"Yesterday, {en_agent} did not {en_base} {en_patient}.", f"{en_agent} did not {en_base} {en_patient} yesterday."),
-                                  "vi": (f"Hôm qua, {vi_agent} không {vi_verb} {vi_patient}.", f"{vi_agent} không {vi_verb} {vi_patient} hôm qua.")}]]
-                    if state_forms_v4_6 is not None:
+                        if version in ("v4.14", "v4.15", "v4.16", "v4.17", "v4.18"):
+                            state_forms_v4_6 = {
+                                "en": ((f"In the workshop, {en_agent} is {progressive} {en_patient} right now.",
+                                        f"Right now, {en_agent} is {progressive} {en_patient} in the workshop.",
+                                        f"{en_agent} is {progressive} {en_patient} right now, in the workshop.",
+                                        f"{en_agent} is {progressive} {en_patient} in the workshop right now."),
+                                       (f"In the workshop, {en_agent} is not {progressive} {en_patient} right now.",
+                                        f"Right now, {en_agent} is not {progressive} {en_patient} in the workshop.",
+                                        f"{en_agent} is not {progressive} {en_patient} right now, in the workshop.",
+                                        f"{en_agent} is not {progressive} {en_patient} in the workshop right now."),
+                                       (f"In the workshop, {en_agent} {en_past} {en_patient} yesterday.",
+                                        f"Yesterday, {en_agent} {en_past} {en_patient} in the workshop.",
+                                        f"{en_agent} {en_past} {en_patient} yesterday, in the workshop.",
+                                        f"{en_agent} {en_past} {en_patient} in the workshop yesterday."),
+                                       (f"In the workshop, {en_agent} did not {en_base} {en_patient} yesterday.",
+                                        f"Yesterday, {en_agent} did not {en_base} {en_patient} in the workshop.",
+                                        f"{en_agent} did not {en_base} {en_patient} yesterday, in the workshop.",
+                                        f"{en_agent} did not {en_base} {en_patient} in the workshop yesterday.")),
+                                "vi": ((f"Trong xưởng, {vi_agent} {vi_verb} {vi_patient} bây giờ.",
+                                        f"Bây giờ, {vi_agent} {vi_verb} {vi_patient} trong xưởng.",
+                                        f"{vi_agent} {vi_verb} {vi_patient} bây giờ, trong xưởng.",
+                                        f"{vi_agent} {vi_verb} {vi_patient} trong xưởng bây giờ."),
+                                       (f"Trong xưởng, {vi_agent} không {vi_verb} {vi_patient} bây giờ.",
+                                        f"Bây giờ, {vi_agent} không {vi_verb} {vi_patient} trong xưởng.",
+                                        f"{vi_agent} không {vi_verb} {vi_patient} bây giờ, trong xưởng.",
+                                        f"{vi_agent} không {vi_verb} {vi_patient} trong xưởng bây giờ."),
+                                       (f"Trong xưởng, {vi_agent} đã {vi_verb} {vi_patient} hôm qua.",
+                                        f"Hôm qua, {vi_agent} đã {vi_verb} {vi_patient} trong xưởng.",
+                                        f"{vi_agent} đã {vi_verb} {vi_patient} hôm qua, trong xưởng.",
+                                        f"{vi_agent} đã {vi_verb} {vi_patient} trong xưởng hôm qua."),
+                                       (f"Trong xưởng, {vi_agent} không {vi_verb} {vi_patient} hôm qua.",
+                                        f"Hôm qua, {vi_agent} không {vi_verb} {vi_patient} trong xưởng.",
+                                        f"{vi_agent} không {vi_verb} {vi_patient} hôm qua, trong xưởng.",
+                                        f"{vi_agent} không {vi_verb} {vi_patient} trong xưởng hôm qua."))}
+                    if version in ("v4.14", "v4.15", "v4.16", "v4.17", "v4.18"):
+                        realized = [state_forms_v4_6[language][state_index][variant]
+                                    for state_index in range(4)]
+                    else:
+                        realized = [state[language][variant] for state in
+                                    [{"en": (f"Right now, {en_agent} {en_present} {en_patient}.", f"{en_agent} {en_present} {en_patient} right now."),
+                                      "vi": (f"Bây giờ, {vi_agent} {vi_verb} {vi_patient}.", f"{vi_agent} {vi_verb} {vi_patient} bây giờ.")},
+                                     {"en": (f"Right now, {en_agent} does not {en_base} {en_patient}.", f"{en_agent} does not {en_base} {en_patient} right now."),
+                                      "vi": (f"Bây giờ, {vi_agent} không {vi_verb} {vi_patient}.", f"{vi_agent} không {vi_verb} {vi_patient} bây giờ.")},
+                                     {"en": (f"Yesterday, {en_agent} {en_past} {en_patient}.", f"{en_agent} {en_past} {en_patient} yesterday."),
+                                      "vi": (f"Hôm qua, {vi_agent} đã {vi_verb} {vi_patient}.", f"{vi_agent} đã {vi_verb} {vi_patient} hôm qua.")},
+                                     {"en": (f"Yesterday, {en_agent} did not {en_base} {en_patient}.", f"{en_agent} did not {en_base} {en_patient} yesterday."),
+                                      "vi": (f"Hôm qua, {vi_agent} không {vi_verb} {vi_patient}.", f"{vi_agent} không {vi_verb} {vi_patient} hôm qua.")}]]
+                    if state_forms_v4_6 is not None and version not in ("v4.14", "v4.15", "v4.16", "v4.17", "v4.18"):
                         realized[0] = state_forms_v4_6[language][0][variant]
                         realized[1] = state_forms_v4_6[language][1][variant]
                     for edge_index, (source, target, kind, value) in enumerate(single_edges + path_edges):
@@ -733,8 +1112,41 @@ def author_seed_v4(output_dir, *, version="v4"):
                                                  if version == "v4.10" else
                                                  "112 train, 40 validation, 40 release-holdout combinations (schema split label test) from three agents not used in prior pilot pools; every held-out factor pair is represented in training; English NOW uses present progressive"
                                                  if version == "v4.11" else
+                                                 "112 train, 40 validation, 40 release-holdout combinations from three new agents; every held-out factor pair is represented in training; English NOW uses present progressive; fresh factors and holdout for matched source-copy ablation"
+                                                 if version == "v4.12" else
+                                                 "112 train, 40 validation, 40 release-holdout combinations from three fresh agent factors; every held-out factor pair is represented in training; English NOW uses present progressive; fresh split and sealed holdout for a source-copy dose-response ablation"
+                                                 if version == "v4.13" else
+                                                 "112 train, 40 validation, 40 release-holdout combinations from three fresh agent factors; every held-out factor pair is represented in training; English NOW uses present progressive; four context-balanced surface realizations per meaning state; fresh sealed holdout for an exposure-diversity test"
+                                if version in ("v4.14", "v4.15") else
+                                                 "112 train, 40 validation, 40 release-holdout combinations from three fresh agent factors; every held-out factor pair is represented in training; English NOW uses present progressive; four context-balanced surface realizations per meaning state; fresh split and sealed holdout for a lower latent-objective-dose study"
+                                                 if version == "v4.16" else
+                                                 "112 train, 40 validation, 40 release-holdout combinations from three fresh agent factors; every held-out factor pair is represented in training; English NOW uses present progressive; four context-balanced surface realizations per meaning state; fresh split and sealed holdout for a unique-transition row-exposure balance study. Train/validation paths apply negative polarity then past time; test paths reverse this order, so the sealed holdout also probes action-order recombination and is not a matched measure of the weighting contrast"
+                                                 if version == "v4.17" else
+                                                 "112 train, 40 validation, 40 release-holdout combinations from three fresh agent factors; every held-out factor pair is represented in training; English NOW uses present progressive; four context-balanced surface realizations per meaning state; train, validation, and sealed holdout use the same action order; fresh split for a 2x2 TIDE-auxiliary/source-copy supervision factorial"
+                                                 if version == "v4.18" else
                                                  "12 train, 4 validation, 4 release-holdout event families, fixed before model selection; new events not used in v3"),
-                                "surface_realizations_per_state": 2,
+                                "surface_realizations_per_state": 4 if version in ("v4.14", "v4.15", "v4.16", "v4.17", "v4.18") else 2,
+                                **({"transition_weighting_note": (
+                                    "There are 3072 duplicated path-step rows across the full split: 1792 in "
+                                    "training, 640 in validation, and 640 in the sealed release holdout. Each "
+                                    "logical path-step transition has one standalone single-edge record and one "
+                                    "path-linked record. In training this adds 1792 record exposures, so those "
+                                    "path-selected transitions contribute twice the row-wise token/edge exposure. "
+                                    "Validation and holdout duplicates are evaluation records, not training "
+                                    "exposure. " + ("The v4.17 protocol crosses uniform row weighting with a "
+                                    "unique-transition condition assigning 0.5 weight to each standalone/path-linked "
+                                    "representation in base per-edge losses; path-composition losses are unchanged. "
+                                    "This is an aggregate weighting contrast, not removal of either record."
+                                    if version == "v4.17" else
+                                    "The representation is fixed identically across conditions; results describe a "
+                                    "path-enriched training distribution, not uniform weighting over unique transitions."))}
+                                    if version in ("v4.15", "v4.16", "v4.17") else {}),
+                                **({"registered_hypotheses": {
+                                    "source_copy_supervision": "Within each TIDE auxiliary multiplier, weight 1.5 is hypothesized to improve source-slot preservation versus weight 0 without reducing action fidelity by more than 5 percentage points.",
+                                    "tide_auxiliary": "At fixed source-copy weight, TIDE auxiliary multiplier 0.1 is hypothesized to improve the joint action-and-preservation outcome versus multiplier 0.",
+                                    "primary_quality_gate": "Every cell, seed, and language/action bucket must pass frozen Unicode, action-fidelity, and preservation thresholds before the release holdout can be opened.",
+                                    "interpretation": "Report cell-wise outcomes and the copy × TIDE interaction descriptively; three seeds do not establish population-level statistical certainty."}}
+                                    if version == "v4.18" else {}),
                                 "limitations": ["AI-authored; independent AI review is preliminary", "synthetic shared grammar; no domain-generalization claim",
                                                 "single deterministic reference per realization", "no human evaluation or natural-corpus efficacy"]},
         "semantic_frames.draft.json": frames,
@@ -747,7 +1159,7 @@ def author_seed_v4(output_dir, *, version="v4"):
 def main():
     parser = argparse.ArgumentParser(description="Author a pending original synthetic Vi–En pilot for review")
     parser.add_argument("output_dir")
-    parser.add_argument("--pilot-version", choices=("v3", "v4", "v4.1", "v4.2", "v4.3", "v4.4", "v4.5", "v4.6", "v4.7", "v4.8", "v4.9", "v4.10", "v4.11"), default="v3")
+    parser.add_argument("--pilot-version", choices=("v3", "v4", "v4.1", "v4.2", "v4.3", "v4.4", "v4.5", "v4.6", "v4.7", "v4.8", "v4.9", "v4.10", "v4.11", "v4.12", "v4.13", "v4.14", "v4.15", "v4.16", "v4.17", "v4.18"), default="v3")
     args = parser.parse_args()
     result = (author_seed(args.output_dir) if args.pilot_version == "v3"
               else author_seed_v4(args.output_dir, version=args.pilot_version))

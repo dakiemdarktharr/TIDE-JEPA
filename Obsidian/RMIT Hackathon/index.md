@@ -8,13 +8,21 @@ This folder is an Obsidian-compatible, project-local knowledge vault. Open this 
 - [[wiki/RMIT Hackathon 2026]] — current official event-format facts, unresolved deliverables, and page inconsistencies.
 - [[wiki/Dataset Research — 2026-09-30]] — current corpus decision, PhoMT conditional permission, mandatory paper citation/release checklist, and intake status. The 2026-09-28 page is historical research context.
 - [[wiki/First Implementation Milestone]] — data-agnostic TIDE-JEPA prototype, independent review, and verification limits.
-- [[experiments/index]] — completed AI-reviewed synthetic Vi–En preliminary pilot and future human-validated experiments.
-- [VI_EN_RESULTS.md](../../VI_EN_RESULTS.md) — current v4.8 paused-training status and preserved historical v4.2 aggregate evaluation.
+- [[experiments/index]] — AI-reviewed synthetic Vi–En preliminary pilots; latest v4.18 validation failure and sealed holdout.
+- [v4.13 status](../../VI_EN_RESULTS_V4.13_STATUS.md) — fresh, independently Luna-reviewed dose-response; 12/12 runs completed, both primary TIDE gates failed and holdout remains sealed.
+- [v4.18 status](../../VI_EN_RESULTS_V4.18_STATUS.md) — independently AI-reviewed 12-run factorial; validation failed, holdout sealed.
+- [v4.17 status](../../VI_EN_RESULTS_V4.17_STATUS.md) — 12 runs and validation complete; all 60 primary checks failed, holdout sealed. See [aggregate report](../../VI_EN_RESULTS_V4.17_VALIDATION.md).
+- [v4.15 status](../../VI_EN_RESULTS_V4.15_STATUS.md) — latest completed nine-run comparison; primary TIDE gate failed and holdout sealed.
+- [v4.14 status](../../VI_EN_RESULTS_V4.14_STATUS.md) — corrected 15,360-record context-diversity pilot; six runs and validation completed, frozen TIDE gate failed, holdout sealed.
+- [VI_EN_RESULTS.md](../../VI_EN_RESULTS.md) — current v4.18 validation failure and sealed release holdout; prior aggregate evaluations preserved.
 - [v4.10 status](../../VI_EN_RESULTS_V4.10_STATUS.md) — frozen private synthetic protocol with two independent Luna approvals; 12/12 training and validation complete, TIDE preservation gate failed and holdout remains sealed. See the [validation report](../../VI_EN_RESULTS_V4.10_VALIDATION.md). v4.9 was superseded before training.
-- v4.11 — private synthetic corpus frozen after two independent Luna reviews; training is next and the fresh holdout remains sealed. See [frozen status](../../VI_EN_RESULTS_V4.11_STATUS.md) and the [Linux revalidation report](../../audits/2026-10-03/LINUX_REVALIDATION.md).
+- v4.14 — six matched runs and validation-only evaluation complete; 4/30 primary seed-by-bucket checks passed, all four held-out paths; all 24 single-action checks failed. Token-only pooled preservation exceeded TIDE in all buckets. Holdout remains sealed. See [status](../../VI_EN_RESULTS_V4.14_STATUS.md) and the [aggregate report](../../VI_EN_RESULTS_V4.14_VALIDATION.md).
+- v4.13 — 12/12 dose-response runs and validation-only evaluation complete; only 10/60 seed-by-bucket checks passed, including one single-action bucket; 47/48 single-action buckets failed, and three path buckets failed. Direct test scoring was refused; holdout remains sealed. See [status](../../VI_EN_RESULTS_V4.13_STATUS.md) and the [aggregate report](../../VI_EN_RESULTS_V4.13_VALIDATION.md).
+- v4.12 — 12/12 matched-ablation runs and validation-only evaluation complete; both primary TIDE source-copy conditions failed the preservation gate, and its fresh holdout remains sealed. See [status](../../VI_EN_RESULTS_V4.12_STATUS.md) and the [aggregate report](../../VI_EN_RESULTS_V4.12_VALIDATION.md).
+- v4.11 — 12/12 runs and validation-only evaluation complete; primary TIDE gate failed and its fresh holdout remains sealed. See [status](../../VI_EN_RESULTS_V4.11_STATUS.md).
 - [VI_EN_RESULTS_V4.8_STATUS.md](../../VI_EN_RESULTS_V4.8_STATUS.md) — aggregate-only training/checkpoint and frozen artifact hashes; no dataset rows.
 - [VI_EN_RESULTS_V4.9_STATUS.md](../../VI_EN_RESULTS_V4.9_STATUS.md) — fresh AI-reviewed protocol; training not started, release gate still sealed.
-- [Linux revalidation — 2026-10-03](../../audits/2026-10-03/LINUX_REVALIDATION.md) — current runtime, 72-test result, audit matrix, and v4.8 artifact-transfer gate.
+- [Linux revalidation — 2026-10-03](../../audits/2026-10-03/LINUX_REVALIDATION.md) — current runtime, audit matrix, latest suite evidence, and v4.8 artifact-transfer gate.
 - [VI_EN_RESULTS_HISTORY.md](../../VI_EN_RESULTS_HISTORY.md) — preserved earlier quality-gate results, including v4.7.
 - [[wiki/Agentic Workflow]] — orchestrator, heavy, review, and find responsibilities and handoffs.
 - [[wiki/Worker Prompt Pack]] — reusable role prompts and prompt-injection boundaries.

@@ -1,6 +1,6 @@
 # TIDE-JEPA experiments
 
-> Status: AI-reviewed original synthetic Vi–En preliminary pilot completed; no PhoMT training or human-validated language result. Source: [[../raw/PhoMT Intake and Vi-En Pilot — 2026-10-01]].
+> Status (2026-10-05): Latest completed result v4.18 failed every primary condition × seed × language/task check: action fidelity and preservation were 0%, while Unicode/EOS were 100%. Its release holdout remains sealed. See [v4.18 status](../../../VI_EN_RESULTS_V4.18_STATUS.md) and [aggregate report](../../../VI_EN_RESULTS_V4.18_VALIDATION.md). Aggregate-only, preliminary synthetic evidence; not human validated. v4.17-r2 also failed all 60 checks, with no consistent weighting benefit. See [v4.17 status](../../../VI_EN_RESULTS_V4.17_STATUS.md), [report](../../../VI_EN_RESULTS_V4.17_VALIDATION.md), [v4.16 status](../../../VI_EN_RESULTS_V4.16_STATUS.md), and [Linux audit](../../../audits/2026-10-03/LINUX_REVALIDATION.md).
 
 ## Completed preliminary pilot
 
