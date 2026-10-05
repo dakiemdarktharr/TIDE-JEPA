@@ -321,6 +321,9 @@ def run_experiment(
             raise ValueError("PhoMT-derived checkpoints, reports, and generated rows must stay under project data/")
     training = config["training"]
     seed = config["seed"]
+    checkpoint_selection_policy = config.get("checkpoint_selection_policy", "validation_loss")
+    if checkpoint_selection_policy not in {"validation_loss", "fixed_final_epoch"}:
+        raise ValueError("checkpoint_selection_policy must be validation_loss or fixed_final_epoch")
     if type(seed) is not int:
         raise ValueError("seed must be an integer")
     epochs = training.get("epochs", 20)
@@ -532,7 +535,12 @@ def run_experiment(
         selection_loss = (validation_metrics["token"]
                           + objective.path_token_weight * validation_metrics["path_token"]
                           + objective.source_copy_weight * validation_metrics["copy_token"])
-        improved = selection_loss < best_validation
+        # A fixed-final policy updates best.pt on every epoch. It is therefore
+        # crash-recoverable like ordinary best selection, but the completed run
+        # always evaluates the preregistered final epoch rather than a validation
+        # metric-selected epoch.
+        improved = (checkpoint_selection_policy == "fixed_final_epoch"
+                    or selection_loss < best_validation)
         checkpoint = {
             "run_sha256": identity_hash,
             "epoch": epoch,

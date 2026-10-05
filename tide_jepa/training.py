@@ -106,6 +106,7 @@ class Objective:
     path_token_weight: float = 1.0
     path_alignment_weight: float = 1.0
     source_copy_weight: float = 0.0
+    compute_source_copy_term: bool = False
     ema_momentum: float = 0.99
     grad_clip: float = 1.0
 
@@ -124,6 +125,8 @@ class Objective:
         )
         if any(not math.isfinite(v) or v < 0 for v in weights):
             raise ValueError("loss weights must be finite and nonnegative")
+        if type(self.compute_source_copy_term) is not bool:
+            raise ValueError("compute_source_copy_term must be boolean")
         if not 0 <= self.ema_momentum <= 1 or not math.isfinite(self.grad_clip) or self.grad_clip <= 0:
             raise ValueError("invalid EMA momentum or gradient clip")
 
@@ -141,15 +144,18 @@ def compute_loss(model, batch: Batch, inventory: Inventory, objective: Objective
     token = (per_token * token_weights).sum() / token_count.clamp_min(1.0)
     copy_token = token.new_zeros(())
     copy_token_count = token.new_zeros(())
-    if objective.source_copy_weight:
+    if objective.source_copy_weight or objective.compute_source_copy_term:
         if batch.copy_mask is None:
-            raise ValueError("source-copy objective requires a token-alignment mask")
-        copy_mask = batch.copy_mask & (batch.labels != model.cfg.pad_id)
-        copy_weights = copy_mask.to(logits.dtype) * edge_weights[:, None]
-        copy_token_count = copy_weights.sum()
-        if copy_token_count.item() == 0:
-            raise ValueError("source-copy objective has no aligned target tokens")
-        copy_token = (per_token * copy_weights).sum() / copy_token_count
+            if objective.source_copy_weight:
+                raise ValueError("source-copy objective requires a token-alignment mask")
+        else:
+            copy_mask = batch.copy_mask & (batch.labels != model.cfg.pad_id)
+            copy_weights = copy_mask.to(logits.dtype) * edge_weights[:, None]
+            copy_token_count = copy_weights.sum()
+            if copy_token_count.item() == 0 and objective.source_copy_weight:
+                raise ValueError("source-copy objective has no aligned target tokens")
+            if copy_token_count.item() > 0:
+                copy_token = (per_token * copy_weights).sum() / copy_token_count
     zero = token.new_zeros(())
     jepa, alignment, variance = zero, zero, zero
     path_jepa, path_token, path_alignment = zero, zero, zero

@@ -100,6 +100,12 @@ class ModelTests(unittest.TestCase):
         torch.testing.assert_close(weighted_loss - base_loss,
                                    0.5 * weighted_values["copy_token"])
         self.assertEqual(base_values["copy_token_count"], 0)
+        matched_loss, matched_values = compute_loss(
+            self.model, batch, self.inventory,
+            Objective(mode="token_only", compute_source_copy_term=True))
+        self.assertEqual(matched_values["copy_token_count"], 4)
+        torch.testing.assert_close(matched_loss, base_loss)
+        torch.testing.assert_close(matched_values["copy_token"], weighted_values["copy_token"])
 
     def test_source_copy_loss_requires_alignment_mask(self):
         with self.assertRaisesRegex(ValueError, "alignment mask"):

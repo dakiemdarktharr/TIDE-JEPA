@@ -14,7 +14,7 @@ from tide_jepa.phomt_intake import TRAIN_MEMBERS, _select_pairs
 from tide_jepa.data import dataset_fingerprint, read_jsonl
 from tide_jepa.pilot_seed import (FAMILIES_V43, FAMILIES_V44, FAMILIES_V45,
                                   FAMILIES_V46, FAMILIES_V47, FAMILIES_V48,
-                                  FAMILIES_V49, FAMILIES_V410, FAMILIES_V411, FAMILIES_V412, FAMILIES_V413, FAMILIES_V414, FAMILIES_V415, FAMILIES_V416, FAMILIES_V417, FAMILIES_V418, author_seed,
+                                  FAMILIES_V49, FAMILIES_V410, FAMILIES_V411, FAMILIES_V412, FAMILIES_V413, FAMILIES_V414, FAMILIES_V415, FAMILIES_V416, FAMILIES_V417, FAMILIES_V418, FAMILIES_V419, author_seed,
                                   author_seed_v4)
 from tide_jepa.schema import Action, Inventory
 
@@ -788,6 +788,37 @@ class SeedAuthoringTests(unittest.TestCase):
             self.assertEqual(len(signatures), 3)
             self.assertEqual(len(set(signatures.values())), 1)
 
+    def test_v419_fresh_corpus_supports_checker_and_pairwise_holdout(self):
+        splits = [FAMILIES_V419[name] for name in ("train", "validation", "test")]
+        triples = [tuple(map(int, row[0].removeprefix("compose419_").split("_")))
+                   for split in splits for row in split]
+        self.assertEqual([len(split) for split in splits], [112, 40, 40])
+        self.assertEqual(len(set(triples)), 192)
+        self.assertTrue(all(38 <= triple[0] < 41 for triple in triples))
+        with tempfile.TemporaryDirectory() as temporary:
+            destination = Path(temporary) / "v4.19"
+            statement = author_seed_v4(destination, version="v4.19")
+            self.assertEqual(statement["records"], 15360)
+            self.assertEqual(statement["surface_realizations_per_state"], 4)
+            self.assertFalse(statement["phomt_used"])
+            self.assertFalse(statement["human_validated"])
+            self.assertIn("matched loss computation", statement["split_policy"])
+            self.assertIn("fixed-final-epoch", statement["split_policy"])
+            self.assertIn("matched_compute", statement["registered_hypotheses"])
+            inventory_value = json.loads((destination / "inventory.draft.json").read_text(encoding="utf-8"))
+            inventory = Inventory(tuple(Action(**value) for value in inventory_value["actions"]), {
+                language: frozenset(Action(**value) for value in inventory_value["proposed_by_language"][language])
+                for language in ("en", "vi")
+            })
+            rows = read_jsonl(destination / "corpus.draft.jsonl", inventory,
+                              languages=("en", "vi"), require_approved=False)
+            frames = json.loads((destination / "semantic_frames.draft.json").read_text(encoding="utf-8"))
+            from tide_jepa.pilot import _semantic_frame_flags
+            self.assertTrue(all((lambda flags: flags is not None and flags["action_fidelity"]
+                                 and flags["preservation"])(
+                _semantic_frame_flags(row.target_text, row.language, frames[row.target_frame_id]))
+                for row in rows))
+
     def test_unique_transition_weighting_rejects_unequal_representation_counts(self):
         from types import SimpleNamespace
         from tide_jepa.experiment import _transition_record_weights
@@ -991,6 +1022,61 @@ class PilotWorkflowTests(unittest.TestCase):
         primary = [item for item in configs if item["objective"]["mode"] == "tide"]
         self.assertEqual({item["objective"]["latent_objective_weight"] for item in primary}, {0.1})
         self.assertEqual(protocol["primary_transition_balance_modes"], ["row_uniform", "unique_transition"])
+
+    def test_freeze_records_compute_matched_tide_matrix_and_final_epoch_selection(self):
+        from tide_jepa.pilot import freeze_pilot
+        self.write_reviews()
+        freeze_pilot(
+            self.base, epochs=1, seeds=(17,), model_width=8, model_heads=2, model_layers=1,
+            condition_modes=("tide",), condition_source_copy_weights=(0.0, 1.5),
+            condition_latent_objective_weights=(0.0, 0.1),
+            checkpoint_selection_policy="fixed_final_epoch", compute_source_copy_term=True)
+        protocol = json.loads((self.base / "protocol.json").read_text())
+        configs = [json.loads((self.base / name).read_text()) for name in protocol["configs"]]
+        self.assertEqual(len(configs), 4)
+        self.assertTrue(all(config["checkpoint_selection_policy"] == "fixed_final_epoch"
+                            for config in configs))
+        self.assertTrue(all(config["objective"]["compute_source_copy_term"] is True
+                            for config in configs))
+        self.assertEqual(protocol["checkpoint_selection_policy"], "fixed_final_epoch")
+        self.assertIn("all loss computations", protocol["compute_policy"])
+
+    def test_freeze_accepts_reviewed_v419_and_binds_new_identity(self):
+        from tide_jepa.pilot import REVIEWED_ARTIFACTS, freeze_pilot
+        self.temporary.cleanup()
+        self.temporary = tempfile.TemporaryDirectory()
+        self.base = Path(self.temporary.name) / "vi-en-ai-v4.19"
+        self.statement = author_seed_v4(self.base, version="v4.19")
+        reviewed_hashes = {name: hashlib.sha256((self.base / name).read_bytes()).hexdigest()
+                           for name in REVIEWED_ARTIFACTS}
+        for name, reviewer in (("review-a.json", "luna-a"), ("review-b.json", "luna-b")):
+            (self.base / name).write_text(json.dumps({
+                "reviewer_id": reviewer, "reviewer_type": "AI", "decision": "approve",
+                "draft_sha256": self.statement["draft_sha256"], "rows_checked": 15360,
+                "artifact_sha256": reviewed_hashes,
+            }))
+        (self.base / "adjudication.json").write_text(json.dumps({
+            "decision": "approve", "draft_sha256": self.statement["draft_sha256"],
+            "human_validated": False,
+        }))
+        freeze_pilot(
+            self.base, epochs=1, seeds=(17,), model_width=8, model_heads=2, model_layers=1,
+            condition_modes=("tide",), condition_source_copy_weights=(0.0, 1.5),
+            condition_latent_objective_weights=(0.0, 0.1),
+            checkpoint_selection_policy="fixed_final_epoch", compute_source_copy_term=True)
+        protocol = json.loads((self.base / "protocol.json").read_text())
+        self.assertEqual(len(protocol["configs"]), 4)
+        self.assertEqual(protocol["primary_quality_mode"], "tide")
+        self.assertEqual(protocol["checkpoint_selection_policy"], "fixed_final_epoch")
+        self.assertIn("all loss computations", protocol["compute_policy"])
+        frozen_inventory = json.loads((self.base / "inventory.json").read_text())
+        inventory = Inventory(tuple(Action(**item) for item in frozen_inventory["actions"]), {
+            language: frozenset(Action(**item) for item in frozen_inventory["approved_by_language"][language])
+            for language in ("en", "vi")
+        })
+        self.assertTrue(all("original-ai-authored-v4.19" in row.provenance_ref
+                            for row in read_jsonl(self.base / "corpus.jsonl", inventory,
+                                                  languages=("en", "vi"))))
 
     def test_freeze_requires_two_current_reviews_and_adjudication(self):
         from tide_jepa.pilot import freeze_pilot
@@ -1259,6 +1345,25 @@ class PilotWorkflowTests(unittest.TestCase):
         second = torch.load(interrupted / "latest.pt", weights_only=True)
         self.assertEqual(first["steps"], second["steps"])
         self.assertTrue(all(torch.equal(value, second["model"][key]) for key, value in first["model"].items()))
+
+    def test_fixed_final_epoch_policy_publishes_last_epoch_as_best(self):
+        import torch
+        from tide_jepa.experiment import run_experiment
+        self.freeze()
+        path = self.base / "tide-seed-17.json"
+        config = json.loads(path.read_text())
+        config["output_dir"] = str(self.base / "fixed-final")
+        config["training"]["epochs"] = 2
+        config["checkpoint_selection_policy"] = "fixed_final_epoch"
+        path.write_text(json.dumps(config))
+        with redirect_stdout(io.StringIO()):
+            run_experiment(path, device="cpu")
+        latest = torch.load(self.base / "fixed-final" / "latest.pt", weights_only=True)
+        best = torch.load(self.base / "fixed-final" / "best.pt", weights_only=True)
+        self.assertEqual(latest["epoch"], 2)
+        self.assertEqual(best["epoch"], 2)
+        self.assertTrue(all(torch.equal(value, best["model"][key])
+                            for key, value in latest["model"].items()))
 
     def test_latest_best_crash_recovers_but_release_test_stays_sealed(self):
         from unittest.mock import patch

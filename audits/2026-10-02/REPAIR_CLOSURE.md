@@ -56,6 +56,10 @@ An independent read-only Luna review compared the earlier closure table with cur
 
 The v4.17 validation-only report exposes numeric thresholds and per-bucket failure reasons. v4.18 identities were verified before validation-only generation; however, its evaluator omitted v4.18 families, so semantic-checker coverage was zero and the frozen result is invalid for quality interpretation. The gate failed closed. A corrected-checker post-hoc diagnostic remained below all thresholds. The release holdout remains sealed. No threshold was relaxed after observing validation.
 
+## 2026-10-05 v4.19 preregistration checkpoint
+
+Two independent `gpt-6-luna` high reviewers approved the same fresh v4.19 synthetic Vi–En corpus; the new 112/40/40 group split and 12-run matched-computation TIDE factorial are frozen. The protocol uses fixed-final-epoch selection and retains the existing per-bucket quality thresholds. Training and generation have not started, so this adds no new quality evidence and does not close Q01. Keep the release holdout sealed unless every registered validation cell, seed, language, and action bucket passes. The full aggregate protocol identities and reproduction commands are in [v4.19 status](../../VI_EN_RESULTS_V4.19_STATUS.md). No PhoMT or Cham data was used; AI review remains preliminary and is not human validation.
+
 
 ## 2026-10-05 state update
 

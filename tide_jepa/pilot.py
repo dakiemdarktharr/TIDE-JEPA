@@ -60,7 +60,8 @@ def freeze_pilot(directory, *, epochs=40, seeds=(17, 23, 41), model_width=32,
                  model_heads=4, model_layers=1, max_length=192, batch_size=80,
                  learning_rate=0.001, primary_mode="tide", source_copy_weight=0.0,
                  condition_modes=None, condition_source_copy_weights=None,
-                 condition_latent_objective_weights=None, condition_transition_balances=None):
+                 condition_latent_objective_weights=None, condition_transition_balances=None,
+                 checkpoint_selection_policy="validation_loss", compute_source_copy_term=False):
     """Bind two distinct AI review records and adjudication to an exact draft.
 
     The user has authorized AI-reviewed preliminary experiments. This specific
@@ -82,6 +83,10 @@ def freeze_pilot(directory, *, epochs=40, seeds=(17, 23, 41), model_width=32,
         raise ValueError("source_copy_weight must be a finite nonnegative number")
     if primary_mode not in MODES:
         raise ValueError("primary_mode must name one registered objective control")
+    if checkpoint_selection_policy not in {"validation_loss", "fixed_final_epoch"}:
+        raise ValueError("checkpoint_selection_policy must be validation_loss or fixed_final_epoch")
+    if type(compute_source_copy_term) is not bool:
+        raise ValueError("compute_source_copy_term must be boolean")
     selected_modes = tuple(condition_modes) if condition_modes is not None else MODES
     copy_weights = (tuple(condition_source_copy_weights)
                     if condition_source_copy_weights is not None else (source_copy_weight,))
@@ -106,8 +111,11 @@ def freeze_pilot(directory, *, epochs=40, seeds=(17, 23, 41), model_width=32,
         raise ValueError("condition transition balances must be unique registered weighting modes")
     if condition_latent_objective_weights is not None and primary_mode != "tide":
         raise ValueError("latent-objective dose registration currently requires tide as the primary mode")
+    if compute_source_copy_term and set(selected_modes) != {"tide"}:
+        raise ValueError("matched source-copy-term computation is currently restricted to TIDE-only conditions")
     custom_matrix = (condition_modes is not None or condition_source_copy_weights is not None
-                     or condition_latent_objective_weights is not None or condition_transition_balances is not None)
+                     or condition_latent_objective_weights is not None or condition_transition_balances is not None
+                     or checkpoint_selection_policy != "validation_loss" or compute_source_copy_term)
     draft_inventory = _read(base / "inventory.draft.json")
     actions = tuple(Action(**item) for item in draft_inventory["actions"])
     proposed = draft_inventory["proposed_by_language"]
@@ -141,6 +149,7 @@ def freeze_pilot(directory, *, epochs=40, seeds=(17, 23, 41), model_width=32,
         "v4.16": "tide_jepa/pilot_seed.py:original-ai-authored-v4.16",
         "v4.17": "tide_jepa/pilot_seed.py:original-ai-authored-v4.17",
         "v4.18": "tide_jepa/pilot_seed.py:original-ai-authored-v4.18",
+        "v4.19": "tide_jepa/pilot_seed.py:original-ai-authored-v4.19",
     }.get(version)
     if expected_provenance is None or any(r.provenance_ref != expected_provenance
            or r.license_ref != "original-ai-authored-internal-research; no-PhoMT-content" for r in rows):
@@ -183,7 +192,8 @@ def freeze_pilot(directory, *, epochs=40, seeds=(17, 23, 41), model_width=32,
     split_seed = {"v4.9": 20261008, "v4.10": 20261009, "v4.11": 20261010,
                   "v4.12": 20261011, "v4.13": 20261012, "v4.14": 20261013,
                   "v4.15": 20261015, "v4.16": 20261017,
-                  "v4.17": 20261018, "v4.18": 20261019}.get(version, 20261001)
+                  "v4.17": 20261018, "v4.18": 20261019,
+                  "v4.19": 20261020}.get(version, 20261001)
     manifest = SplitManifest(dataset_fingerprint(approved_rows), split_seed, fractions, groups,
                              {name: tuple(sorted(r.record_id for r in rows if groups[r.split_group_id] == name))
                               for name in ("train", "validation", "test")})
@@ -234,6 +244,8 @@ def freeze_pilot(directory, *, epochs=40, seeds=(17, 23, 41), model_width=32,
                                        else f"{name_prefix}-seed-{seed}")
                         objective_config = {"mode": mode, **({"source_copy_weight": condition_weight}
                                                                 if condition_weight else {})}
+                        if compute_source_copy_term:
+                            objective_config["compute_source_copy_term"] = True
                         if condition_latent_objective_weights is not None and mode == "tide":
                             objective_config["latent_objective_weight"] = latent_weight
                         config = {"corpus": "corpus.jsonl", "inventory": "inventory.json", "alignments": "alignments.json",
@@ -242,6 +254,8 @@ def freeze_pilot(directory, *, epochs=40, seeds=(17, 23, 41), model_width=32,
                                   "seed": seed, "model": {"width": model_width, "heads": model_heads,
                                                             "layers": model_layers, "max_length": max_length},
                                   "objective": objective_config,
+                                  **({"checkpoint_selection_policy": checkpoint_selection_policy}
+                                     if checkpoint_selection_policy != "validation_loss" else {}),
                                   "training": {"epochs": epochs, "batch_size": batch_size,
                                                "learning_rate": learning_rate,
                                                "transition_balance": transition_balance}}
@@ -279,9 +293,9 @@ def freeze_pilot(directory, *, epochs=40, seeds=(17, 23, 41), model_width=32,
                                      **({"release_holdout_scope": (
                                          "The release holdout uses the same ordered action paths as train and validation; "
                                          "it probes fresh held-out factor combinations only and does not add an action-order shift.")}
-                                        if version == "v4.18" else {}),
+                                        if version in ("v4.18", "v4.19") else {}),
                                      **({"registered_hypotheses": statement["registered_hypotheses"]}
-                                        if version == "v4.18" else {}),
+                                        if version in ("v4.18", "v4.19") else {}),
                                      **({"primary_latent_objective_weights": primary_latent_weights}
                                         if primary_latent_weights is not None else {}),
                                      **({"latent_objective_multiplier_scope": [
@@ -291,7 +305,10 @@ def freeze_pilot(directory, *, epochs=40, seeds=(17, 23, 41), model_width=32,
                                      "config_files_sha256": {name: _hash_file(base / name) for name in config_names},
                                      "implementation_sha256": implementation, "runtime": runtime,
                                      "implementation_snapshot": "implementation-snapshot/",
-                                     "checkpoint_selection": ("validation token CE + path token CE + weighted aligned-source token CE; same criterion for all conditions"
+                                     "checkpoint_selection_policy": checkpoint_selection_policy,
+                                     "checkpoint_selection": ("fixed final epoch for every condition; validation losses do not choose the evaluated checkpoint"
+                                                               if checkpoint_selection_policy == "fixed_final_epoch" else
+                                                               "validation token CE + path token CE + weighted aligned-source token CE; same criterion for all conditions"
                                                                if any(copy_weights) else
                                                                "validation token CE + path token CE; same criterion for all modes"),
                                      "test_policy": "train every registered config; all primary-seed validation generation gates must pass before opening the sealed release holdout; never tune on test",
@@ -307,7 +324,9 @@ def freeze_pilot(directory, *, epochs=40, seeds=(17, 23, 41), model_width=32,
                                                             "held_out_path_action_fidelity_rate": 0.8,
                                                             "held_out_path_preservation_rate": 0.8,
                                                             "scope": "each language/action bucket using the narrow synthetic frame checker"},
-                                     "compute_policy": "equal examples, epochs, seed-wise batch order and architecture; log tokens, updates and wall time; no matched-FLOP claim"})
+                                     "compute_policy": ("TIDE-only conditions share architecture, examples, epochs, seed-wise batch order, and all loss computations; source-copy loss is computed in every condition and only its registered multiplier differs. Updates, tokens, and wall time are logged."
+                                                        if compute_source_copy_term else
+                                                        "equal examples, epochs, seed-wise batch order and architecture; log tokens, updates and wall time; no matched-FLOP claim")})
     return approval
 
 
@@ -356,14 +375,14 @@ def _semantic_frame_flags(text, language, frame):
                              FAMILIES_V45, FAMILIES_V46, FAMILIES_V47, FAMILIES_V48,
                              FAMILIES_V49, FAMILIES_V410, FAMILIES_V411, FAMILIES_V412,
                              FAMILIES_V413, FAMILIES_V414, FAMILIES_V415, FAMILIES_V416,
-                             FAMILIES_V417, FAMILIES_V418)
+                                     FAMILIES_V417, FAMILIES_V418, FAMILIES_V419)
     event = frame.get("event")
     definition = next((item for family_set in (FAMILIES_V4, FAMILIES_V42, FAMILIES_V43,
                                                FAMILIES_V44, FAMILIES_V45, FAMILIES_V46,
                                                FAMILIES_V47, FAMILIES_V48, FAMILIES_V49, FAMILIES_V410,
                                                FAMILIES_V411, FAMILIES_V412, FAMILIES_V413,
                                                FAMILIES_V414, FAMILIES_V415, FAMILIES_V416,
-                                               FAMILIES_V417, FAMILIES_V418)
+                                               FAMILIES_V417, FAMILIES_V418, FAMILIES_V419)
                        for group in family_set.values() for item in group if item[0] == event), None)
     if definition is None:
         return None
@@ -772,6 +791,9 @@ def main():
     parser.add_argument("--condition-latent-objective-weights", nargs="+", type=float)
     parser.add_argument("--condition-transition-balances", nargs="+",
                         choices=("row_uniform", "unique_transition"))
+    parser.add_argument("--checkpoint-selection-policy", choices=("validation_loss", "fixed_final_epoch"),
+                        default="validation_loss")
+    parser.add_argument("--compute-source-copy-term", action="store_true")
     parser.add_argument("--evaluation-split", choices=("validation", "test"), default="validation")
     parser.add_argument("--resume", action="store_true")
     args = parser.parse_args()
@@ -783,7 +805,9 @@ def main():
                               condition_modes=args.condition_modes,
                               condition_source_copy_weights=args.condition_source_copy_weights,
                               condition_latent_objective_weights=args.condition_latent_objective_weights,
-                              condition_transition_balances=args.condition_transition_balances)
+                              condition_transition_balances=args.condition_transition_balances,
+                              checkpoint_selection_policy=args.checkpoint_selection_policy,
+                              compute_source_copy_term=args.compute_source_copy_term)
     elif args.command == "run":
         result = run_suite(args.directory, resume=args.resume)
     else:
