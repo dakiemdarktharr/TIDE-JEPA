@@ -62,10 +62,18 @@ class SourceSelectionTests(unittest.TestCase):
 class SeedAuthoringTests(unittest.TestCase):
     def test_quality_gate_applies_to_frozen_primary_mode_only(self):
         from tide_jepa.pilot import _quality_gate_status
-        passing = {"en/single/action": {"valid_unicode_pass": True, "action_fidelity_pass": True}}
-        failing = {"en/single/action": {"valid_unicode_pass": True, "action_fidelity_pass": False}}
+        passing = {"en/single/action": {"valid_unicode_pass": True,
+                                        "semantic_checker_coverage_pass": True,
+                                        "action_fidelity_pass": True}}
+        failing = {"en/single/action": {"valid_unicode_pass": True,
+                                        "semantic_checker_coverage_pass": True,
+                                        "action_fidelity_pass": False}}
+        uncovered = {"en/single/action": {"valid_unicode_pass": True,
+                                          "semantic_checker_coverage_pass": False,
+                                          "action_fidelity_pass": True}}
         self.assertEqual(_quality_gate_status("tide", "tide", passing), "pass")
         self.assertEqual(_quality_gate_status("tide", "tide", failing), "fail")
+        self.assertEqual(_quality_gate_status("tide", "tide", uncovered), "fail")
         self.assertEqual(_quality_gate_status("tide", "token_only", failing), "control_only")
         self.assertEqual(_quality_gate_status("tide", "tide", {}), "fail")
 
@@ -667,6 +675,25 @@ class SeedAuthoringTests(unittest.TestCase):
                 _semantic_frame_flags(row.target_text, row.language, frames[row.target_frame_id]))
                 for row in rows))
 
+    def test_v418_semantic_checker_covers_all_authored_surface_forms(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            destination = Path(temporary) / "v4.18"
+            statement = author_seed_v4(destination, version="v4.18")
+            inventory_value = json.loads((destination / "inventory.draft.json").read_text(encoding="utf-8"))
+            inventory = Inventory(tuple(Action(**value) for value in inventory_value["actions"]), {
+                language: frozenset(Action(**value) for value in inventory_value["proposed_by_language"][language])
+                for language in ("en", "vi")
+            })
+            rows = read_jsonl(destination / "corpus.draft.jsonl", inventory,
+                              languages=("en", "vi"), require_approved=False)
+            frames = json.loads((destination / "semantic_frames.draft.json").read_text(encoding="utf-8"))
+            from tide_jepa.pilot import _semantic_frame_flags
+            self.assertEqual(statement["version"], "vi-en-ai-v4.18")
+            self.assertTrue(all((lambda flags: flags is not None and flags["action_fidelity"]
+                                 and flags["preservation"])(
+                _semantic_frame_flags(row.target_text, row.language, frames[row.target_frame_id]))
+                for row in rows))
+
     def test_v416_lower_dose_corpus_has_fresh_factors_and_weighting_disclosure(self):
         splits = [FAMILIES_V416[name] for name in ("train", "validation", "test")]
         triples = [tuple(map(int, row[0].removeprefix("compose416_").split("_")))
@@ -1000,6 +1027,7 @@ class PilotWorkflowTests(unittest.TestCase):
         self.assertEqual(protocol["primary_source_copy_weights"], [0.0, 1.5])
         self.assertEqual(protocol["primary_latent_objective_weights"], [0.0, 0.1])
         self.assertEqual(protocol["primary_transition_balance_modes"], ["unique_transition"])
+        self.assertEqual(protocol["quality_thresholds"]["semantic_checker_coverage_rate"], 1.0)
         self.assertEqual({(c["objective"].get("source_copy_weight", 0.0),
                            c["objective"]["latent_objective_weight"], c["seed"])
                           for c in configs},

@@ -301,6 +301,7 @@ def freeze_pilot(directory, *, epochs=40, seeds=(17, 23, 41), model_width=32,
                                      "generation_max_new_tokens": 160, "human_validated": False,
                                      "decoder_policy": "greedy byte-level UTF-8 constrained decoding; EOS only at complete codepoint boundaries",
                                      "quality_thresholds": {"valid_unicode_rate": 1.0,
+                                                            "semantic_checker_coverage_rate": 1.0,
                                                             "single_action_action_fidelity_rate": 0.9,
                                                             "single_action_preservation_rate": 0.9,
                                                             "held_out_path_action_fidelity_rate": 0.8,
@@ -354,13 +355,15 @@ def _semantic_frame_flags(text, language, frame):
     from .pilot_seed import (FAMILIES_V4, FAMILIES_V42, FAMILIES_V43, FAMILIES_V44,
                              FAMILIES_V45, FAMILIES_V46, FAMILIES_V47, FAMILIES_V48,
                              FAMILIES_V49, FAMILIES_V410, FAMILIES_V411, FAMILIES_V412,
-                             FAMILIES_V413, FAMILIES_V414, FAMILIES_V415, FAMILIES_V416, FAMILIES_V417)
+                             FAMILIES_V413, FAMILIES_V414, FAMILIES_V415, FAMILIES_V416,
+                             FAMILIES_V417, FAMILIES_V418)
     event = frame.get("event")
     definition = next((item for family_set in (FAMILIES_V4, FAMILIES_V42, FAMILIES_V43,
                                                FAMILIES_V44, FAMILIES_V45, FAMILIES_V46,
                                                FAMILIES_V47, FAMILIES_V48, FAMILIES_V49, FAMILIES_V410,
                                                FAMILIES_V411, FAMILIES_V412, FAMILIES_V413,
-                                               FAMILIES_V414, FAMILIES_V415, FAMILIES_V416, FAMILIES_V417)
+                                               FAMILIES_V414, FAMILIES_V415, FAMILIES_V416,
+                                               FAMILIES_V417, FAMILIES_V418)
                        for group in family_set.values() for item in group if item[0] == event), None)
     if definition is None:
         return None
@@ -381,9 +384,13 @@ def _semantic_frame_flags(text, language, frame):
             verb_phrase = ("did not " + base) if frame["time"] == "past" else ("does not " + base)
         else:
             verb_phrase = past if frame["time"] == "past" else present
-        preservation = all(_norm_text(part) in normalized for part in (agent, patient, verb_phrase))
-        if place:
-            preservation = preservation and _norm_text(place) in normalized
+        agent_present = _norm_text(agent) in normalized
+        patient_present = _norm_text(patient) in normalized
+        predicate_present = _norm_text(verb_phrase) in normalized
+        place_present = _norm_text(place) in normalized if place else None
+        preservation = agent_present and patient_present and predicate_present
+        if place_present is not None:
+            preservation = preservation and place_present
         negative = "did not" in normalized or "does not" in normalized or "is not" in normalized
         other_time = "right now" if frame["time"] == "past" else "yesterday"
         action = (all(_norm_text(marker) in normalized for marker in required_markers)
@@ -395,9 +402,13 @@ def _semantic_frame_flags(text, language, frame):
         required_markers.append("hôm qua" if frame["time"] == "past" else "bây giờ")
         verb_phrase = ("không " + verb_vi) if frame["polarity"] == "negative" else (
             ("đã " if frame["time"] == "past" else "") + verb_vi)
-        preservation = all(_norm_text(part) in normalized for part in (agent, patient, verb_phrase))
-        if place:
-            preservation = preservation and _norm_text(place) in normalized
+        agent_present = _norm_text(agent) in normalized
+        patient_present = _norm_text(patient) in normalized
+        predicate_present = _norm_text(verb_phrase) in normalized
+        place_present = _norm_text(place) in normalized if place else None
+        preservation = agent_present and patient_present and predicate_present
+        if place_present is not None:
+            preservation = preservation and place_present
         negative = "không" in normalized.split()
         past_positive = "đã" in normalized.split()
         other_time = "bây giờ" if frame["time"] == "past" else "hôm qua"
@@ -408,6 +419,8 @@ def _semantic_frame_flags(text, language, frame):
     else:
         return None
     return {"action_fidelity": bool(action), "preservation": bool(preservation),
+            "agent_preserved": bool(agent_present), "patient_preserved": bool(patient_present),
+            "predicate_preserved": bool(predicate_present), "place_preserved": place_present,
             "checker_scope": "v4 synthetic tense/polarity grammar; event roles and listed surface forms only"}
 
 
@@ -657,6 +670,8 @@ def evaluate_generation(config_path, *, max_new_tokens=160, split="test"):
         required_preservation = thresholds.get(f"{prefix}_preservation_rate")
         bucket_checks[bucket] = {
             "valid_unicode_pass": total["valid_unicode_rate"] >= thresholds.get("valid_unicode_rate", 1.0),
+            "semantic_checker_coverage_pass": (
+                total["checker_coverage_rate"] >= thresholds.get("semantic_checker_coverage_rate", 1.0)),
             "action_fidelity_pass": (total["action_fidelity_rate"] is not None
                                       and required_fidelity is not None
                                       and total["action_fidelity_rate"] >= required_fidelity),

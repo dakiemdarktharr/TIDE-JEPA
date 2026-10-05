@@ -10,7 +10,7 @@ The fresh split uses 112/40/40 groups (8,960/3,200/3,200 records), holds out fre
 
 All 12 frozen CPU configurations completed 29 epochs and 3,248 updates each. Checkpoint, corpus, split, config, review, and protocol identities were audited before validation. Validation-only generation completed for all 12 configurations; the release holdout was not evaluated and remains sealed.
 
-The frozen gate failed for every condition, seed, and language/task bucket. Single-action and held-out-path action fidelity and preservation were all 0%; Unicode validity and EOS completion were 100%. The accepted-reference rate was low and CER remained high across buckets. This does not establish semantic correctness, naturalness, or natural-corpus efficacy. No TIDE advantage is claimed. See the [aggregate validation report](VI_EN_RESULTS_V4.18_VALIDATION.md); it contains no generated or reference text.
+The first frozen validation report is **invalid for semantic scoring**: the evaluator's event-family registry stopped at v4.17, so v4.18 had 0% checker coverage (`0/0` semantic denominators). Those values do not mean the model scored 0%. The gate correctly failed closed and the release holdout was not evaluated. A supplemental post-hoc rescore using the corrected checker covered all saved validation generations, but it is diagnostic only and cannot replace the frozen gate. It measured action fidelity of 26.5–52.5% for single actions and 51.0–72.9% for paths; preservation was 0.4–1.9% and 0.8–8.3%, respectively. In single-action outputs, patient presence was only 7.7–22.1% and predicate presence 5.2–11.2%, pointing to weak source-slot retention and transformation control. The corrected scores remain below every registered threshold. See the [frozen evaluation report](VI_EN_RESULTS_V4.18_VALIDATION.md) and [post-hoc rescore](VI_EN_RESULTS_V4.18_RESCORING.md); both contain aggregate metrics only.
 
 The private corpus, reviews, protocol, metrics, generations, and checkpoints remain under Git-ignored `data/` and `runs/`. No PhoMT or Phan Rang Cham data was used. `human_validated=false`.
 
@@ -27,4 +27,4 @@ After training is complete, verify every registered config and checkpoint identi
 .venv/bin/python -B scripts/summarize_vi_en_validation.py data/pilot/vi-en-ai-v4.18 VI_EN_RESULTS_V4.18_VALIDATION.md
 ```
 
-All reports remain aggregate-only and label the work preliminary and AI-reviewed, not human validated. A follow-up experiment requires a fresh frozen version and must not tune against the sealed holdout.
+The v4.18 semantic checker fix and complete-coverage precondition are now regression-tested. Any follow-up quality gate must freeze the corrected evaluator before validation; use a fresh version, corpus/reviews/protocol, and release holdout. Never tune against the sealed v4.18 holdout. All reports remain aggregate-only and label the work preliminary and AI-reviewed, not human validated.
