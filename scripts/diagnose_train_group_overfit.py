@@ -106,8 +106,9 @@ def run_diagnostic(directory, *, steps=600, seed=613):
         "initial_train_semantic": initial,
         "training_curve": history,
         "checkpoint_written": False,
-        "validation_read": False,
-        "release_holdout_read": False,
+        "corpus_rows_loaded_for_split_integrity_validation": True,
+        "validation_rows_selected_or_scored": False,
+        "release_holdout_rows_selected_or_scored": False,
         "human_validated": False,
         "phomt_used": False,
     }

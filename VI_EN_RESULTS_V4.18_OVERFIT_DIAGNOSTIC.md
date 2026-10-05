@@ -1,6 +1,6 @@
 # v4.18 training-only overfit diagnostic
 
-This is a training-fit sanity check, not a validation result, quality-gate result, or generalization claim. It uses one complete event group from the v4.18 **train split only** and never reads validation or release-holdout rows.
+This is a training-fit sanity check, not a validation result, quality-gate result, or generalization claim. The script parses the complete corpus to verify the frozen split manifest, then selects one complete event group from the v4.18 **train split only**. It never selects, scores, or emits validation or release-holdout rows.
 
 ## Setup
 
@@ -21,7 +21,7 @@ This is a training-fit sanity check, not a validation result, quality-gate resul
 
 This shows the implementation can memorize source-conditioned transformations on one seen lexical combination. It does not show lexical recombination or held-out generalization. Together with v4.18's poor post-hoc validation rescore, it points toward a generalization/data-coverage problem rather than a complete inability to fit the task. The diagnostic has one training group and one random seed, so this interpretation is preliminary.
 
-The validation quality gate remains unmet, and the release holdout remains sealed. No PhoMT or Phan Rang Cham data was used. `human_validated=false`.
+The validation quality gate remains unmet, and the release holdout remains sealed. No validation or release-holdout example is scored by this diagnostic. No PhoMT or Phan Rang Cham data was used. `human_validated=false`.
 
 ## Reproduction
 
@@ -29,4 +29,4 @@ The validation quality gate remains unmet, and the release holdout remains seale
 .venv/bin/python -B scripts/diagnose_train_group_overfit.py data/pilot/vi-en-ai-v4.18 --steps 600 --seed 613
 ```
 
-The script prints aggregate counts only, does not save a checkpoint, and asserts that its selected examples belong to the training split.
+The script prints aggregate counts only, does not save a checkpoint, and asserts that its selected examples belong to the training split. Its JSON records that the full corpus was loaded to validate split integrity and that no non-train rows were selected or scored.
