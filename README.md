@@ -62,6 +62,20 @@ The M1/M2 18-test CPU suite passed again on 2026-09-29 after strengthening actio
 
 Future GPU training requires the user's device/driver-matched official PyTorch build, selected from [PyTorch's installation guide](https://pytorch.org/get-started/locally/), with separate verification on that device. `requirements-test-cpu.txt` deliberately selects a CPU-only wheel and is not the GPU training setup. No CUDA installation or GPU performance claim is included in this milestone.
 
+## Verified CPU setup (Linux)
+
+From the repository root on Linux with Python 3.11, create a clean environment and install the CPU requirements:
+
+```sh
+python3.11 -m venv .venv
+.venv/bin/python -m pip install -r requirements-test-cpu.txt
+PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -B -m unittest discover -s tests -v
+.venv/bin/python -B -m compileall -q tide_jepa tests audits/2026-10-02/root_probes.py
+.venv/bin/python -m pip check
+```
+
+Verified on 2026-10-06 from a clean tracked-source archive of commit `925acb1` with a newly created virtualenv and `torch==2.14.0+cpu`: **96 tests passed, 0 skipped**, `compileall` passed, and `pip check` found no broken requirements. The source archive contained no ignored `data/` or `runs/` artifacts. The full suite includes loopback HTTP tests and therefore needs local loopback binding. This verifies the commands on the current Linux host; transitive package versions are resolver-selected, so `requirements-test-cpu.txt` is still not a complete dependency lock. CUDA, clean OS-image provisioning, and GPU behavior are unverified.
+
 ## Layout
 
 - `tide_jepa/config.py`: language registry and model sizes.
