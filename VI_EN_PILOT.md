@@ -1,6 +1,6 @@
 # TIDE-JEPA preliminary English–Vietnamese pilot
 
-v4.21 has been separately reviewed by two Luna agents, adjudicated, and frozen for a new 2×2 TIDE source-copy × decoder study. It has not trained; see [the frozen status](VI_EN_RESULTS_V4.21_STATUS.md).
+v4.21 completed training and validation generation, but its frozen evaluator had zero semantic-checker coverage, making the report invalid for quality scoring. Its release holdout remains sealed and its artifacts are preserved without post-hoc rescoring. The family-registry omission is fixed with regression coverage, and v4.22 is being prepared with fresh review and frozen identities; see [v4.21 status](VI_EN_RESULTS_V4.21_STATUS.md).
 
 The latest completed v4.20 pilot finished six frozen decoder/seed runs and validation generation but failed all 60 bucket gates. Its release holdout remains sealed. The current repaired CPU suite passes 109 tests with no skips; see [troubleshooting evidence](audits/2026-10-06/TROUBLESHOOTING.md), [v4.20 status](VI_EN_RESULTS_V4.20_STATUS.md), [validation report](VI_EN_RESULTS_V4.20_VALIDATION.md), and [post-hoc component diagnostic](VI_EN_RESULTS_V4.20_DIAGNOSTIC.md). Existing checkpoints require their original implementation snapshot; `scripts/run_frozen.py` verifies and runs it without rebinding the protocol.
 
@@ -62,7 +62,7 @@ Equal examples, updates and architecture do not imply equal FLOPs. The runs log 
 
 ## Local commands
 
-On the current Linux host, the repaired full CPU suite passes 109 tests with 0 skips; compileall, `pip check`, the isolated DOM checks, and `git diff --check` pass. HTTP integration tests require local loopback binding. The latest repair details and bounded audit closure are in [2026-10-06 troubleshooting](audits/2026-10-06/TROUBLESHOOTING.md) and [repair closure](audits/2026-10-02/REPAIR_CLOSURE.md). v4.20 completed six 29-epoch runs and validation-only generation, but all 60 frozen checks failed; its release holdout remains sealed. See the [v4.20 status](VI_EN_RESULTS_V4.20_STATUS.md) and [validation report](VI_EN_RESULTS_V4.20_VALIDATION.md). All prior failed-version holdouts remain sealed.
+On the current Linux host, the current full CPU suite passes 111 tests with 0 skips; compileall, `pip check`, the isolated DOM checks, and `git diff --check` pass. HTTP integration tests require local loopback binding. The latest repair details and bounded audit closure are in [2026-10-06 troubleshooting](audits/2026-10-06/TROUBLESHOOTING.md) and [repair closure](audits/2026-10-02/REPAIR_CLOSURE.md). v4.20 completed six 29-epoch runs and validation-only generation, but all 60 frozen checks failed; its release holdout remains sealed. See the [v4.20 status](VI_EN_RESULTS_V4.20_STATUS.md) and [validation report](VI_EN_RESULTS_V4.20_VALIDATION.md). All prior failed-version holdouts remain sealed.
 
 For a **new, separately reviewed version**, run from the project root. These are workflow commands, not an assertion that a clean bootstrap or full training run has already been verified. Never overwrite an existing version or reopen its release test for tuning. Bind the two independent AI reviews and adjudication to the exact draft before freezing. Finish all controls/seeds, evaluate generation on validation only, and proceed to release-test scoring only when every primary-seed validation gate passes.
 

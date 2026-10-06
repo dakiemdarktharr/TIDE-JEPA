@@ -14,7 +14,7 @@ from tide_jepa.phomt_intake import TRAIN_MEMBERS, _select_pairs
 from tide_jepa.data import dataset_fingerprint, read_jsonl
 from tide_jepa.pilot_seed import (FAMILIES_V43, FAMILIES_V44, FAMILIES_V45,
                                   FAMILIES_V46, FAMILIES_V47, FAMILIES_V48,
-                                  FAMILIES_V49, FAMILIES_V410, FAMILIES_V411, FAMILIES_V412, FAMILIES_V413, FAMILIES_V414, FAMILIES_V415, FAMILIES_V416, FAMILIES_V417, FAMILIES_V418, FAMILIES_V419, FAMILIES_V420, FAMILIES_V421, author_seed,
+                                  FAMILIES_V49, FAMILIES_V410, FAMILIES_V411, FAMILIES_V412, FAMILIES_V413, FAMILIES_V414, FAMILIES_V415, FAMILIES_V416, FAMILIES_V417, FAMILIES_V418, FAMILIES_V419, FAMILIES_V420, FAMILIES_V421, FAMILIES_V422, author_seed,
                                   author_seed_v4)
 from tide_jepa.schema import Action, Inventory
 
@@ -881,6 +881,17 @@ class SeedAuthoringTests(unittest.TestCase):
             self.assertFalse(statement["human_validated"])
             self.assertIn("2x2", statement["split_policy"])
             self.assertIn("copy_decoder_interaction", statement["registered_hypotheses"])
+            inventory_value = json.loads((destination / "inventory.draft.json").read_text(encoding="utf-8"))
+            inventory = Inventory(tuple(Action(**value) for value in inventory_value["actions"]), {
+                language: frozenset(Action(**value) for value in inventory_value["proposed_by_language"][language])
+                for language in ("en", "vi")})
+            rows = read_jsonl(destination / "corpus.draft.jsonl", inventory,
+                              languages=("en", "vi"), require_approved=False)
+            frames = json.loads((destination / "semantic_frames.draft.json").read_text(encoding="utf-8"))
+            from tide_jepa.pilot import _semantic_frame_flags
+            self.assertTrue(all(_semantic_frame_flags(row.target_text, row.language,
+                                                       frames[row.target_frame_id]) is not None
+                                for row in rows))
 
             from tide_jepa.pilot import REVIEWED_ARTIFACTS, freeze_pilot
             artifact_hashes = {name: hashlib.sha256((destination / name).read_bytes()).hexdigest()
@@ -905,6 +916,33 @@ class SeedAuthoringTests(unittest.TestCase):
             self.assertEqual(protocol["primary_source_pointer_decoder_modes"], ["vocabulary", "source_pointer"])
             self.assertTrue(all(name in protocol["registered_hypotheses"]
                                 for name in ("copy_decoder_interaction", "primary_quality_gate")))
+
+    def test_v422_fresh_corpus_checker_knows_authored_version(self):
+        splits = [FAMILIES_V422[name] for name in ("train", "validation", "test")]
+        triples = [tuple(map(int, row[0].removeprefix("compose422_").split("_")))
+                   for split in splits for row in split]
+        self.assertEqual([len(split) for split in splits], [112, 40, 40])
+        self.assertEqual(len(set(triples)), 192)
+        self.assertTrue(all(47 <= triple[0] < 50 for triple in triples))
+        with tempfile.TemporaryDirectory() as temporary:
+            destination = Path(temporary) / "v4.22"
+            statement = author_seed_v4(destination, version="v4.22")
+            self.assertEqual(statement["records"], 15360)
+            self.assertEqual(statement["surface_realizations_per_state"], 4)
+            self.assertFalse(statement["phomt_used"])
+            self.assertFalse(statement["human_validated"])
+            self.assertIn("copy-loss", statement["split_policy"])
+            inventory_value = json.loads((destination / "inventory.draft.json").read_text(encoding="utf-8"))
+            inventory = Inventory(tuple(Action(**value) for value in inventory_value["actions"]), {
+                language: frozenset(Action(**value) for value in inventory_value["proposed_by_language"][language])
+                for language in ("en", "vi")})
+            rows = read_jsonl(destination / "corpus.draft.jsonl", inventory,
+                              languages=("en", "vi"), require_approved=False)
+            frames = json.loads((destination / "semantic_frames.draft.json").read_text(encoding="utf-8"))
+            from tide_jepa.pilot import _semantic_frame_flags
+            self.assertTrue(all(_semantic_frame_flags(row.target_text, row.language,
+                                                       frames[row.target_frame_id]) is not None
+                                for row in rows))
 
     def test_unique_transition_weighting_rejects_unequal_representation_counts(self):
         from types import SimpleNamespace
