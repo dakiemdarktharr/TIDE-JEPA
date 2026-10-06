@@ -1,6 +1,6 @@
 param(
-    [string]$Config = 'data/pilot/vi-en-ai-v4.2/tide-seed-17.json',
-    [string]$Checkpoint = 'runs/vi-en-ai-v4.2/tide-seed-17/best.pt',
+    [Parameter(Mandatory=$true)][string]$Config,
+    [Parameter(Mandatory=$true)][string]$Checkpoint,
     [int]$Port = 8765
 )
 $ErrorActionPreference = 'Stop'
@@ -17,5 +17,10 @@ if ($Port -lt 1024 -or $Port -gt 65535) { throw 'Port must be in 1024..65535.' }
 $env:PYTHONPATH = $sitePackages
 py -3.11 -B -c "import sys, torch; assert sys.version_info[:2] == (3, 11); assert torch.__version__ == '2.14.0+cpu'"
 if ($LASTEXITCODE -ne 0) { throw 'Python 3.11 / PyTorch CPU runtime check failed.' }
-py -3.11 -B -m tide_jepa.demo $Config $Checkpoint --port $Port
+$pilotDirectory = Split-Path -Parent (Resolve-Path -LiteralPath $Config).Path
+if (Test-Path -LiteralPath (Join-Path $pilotDirectory 'protocol.json') -PathType Leaf) {
+    py -3.11 -B scripts/run_frozen.py $pilotDirectory demo $Config $Checkpoint --port $Port
+} else {
+    py -3.11 -B -m tide_jepa.demo $Config $Checkpoint --port $Port
+}
 if ($LASTEXITCODE -ne 0) { throw "Demo exited with code $LASTEXITCODE." }

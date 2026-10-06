@@ -6,7 +6,7 @@ AI-authored and independently AI-reviewed preliminary synthetic pilot. **Not hum
 
 The corpus has 15360 records and 192 event combinations. Split groups: 112/40/40; records: 8960/3200/3200 (train/validation/release holdout). Data split policy: 112 train, 40 validation, 40 release-holdout combinations from three fresh agent factors; every held-out factor pair is represented in training; English NOW uses present progressive; four context-balanced surface realizations per meaning state; action order matches across all splits; fresh split for a TIDE vocabulary-softmax versus source-pointer decoder comparison with fixed-final-epoch evaluation. Frozen release-holdout scope: The release holdout uses the same ordered action paths as train and validation; it probes fresh held-out factor combinations only and does not add an action-order shift.
 
-Objective conditions: tide with source-copy weight 0 and TIDE latent-objective multiplier 0; transition balance `row_uniform`; decoder `vocabulary`; tide with source-copy weight 0 and TIDE latent-objective multiplier 0; transition balance `row_uniform`; decoder `source_pointer`. Seeds 17, 23, 41; 29 epochs and 3248 updates/config; width 32, 4 heads, 1 layers. The preregistered final epoch was evaluated (`fixed_final_epoch`); validation loss did not select the checkpoint. Decoder: greedy byte-level UTF-8 constrained decoding; EOS only at complete codepoint boundaries.
+Objective conditions: tide with source-copy weight 0 and TIDE latent-objective multiplier 0; transition balance `row_uniform`; decoder `source_pointer`; tide with source-copy weight 0 and TIDE latent-objective multiplier 0; transition balance `row_uniform`; decoder `vocabulary`. Seeds 17, 23, 41; 29 epochs and 3248 updates/config; width 32, 4 heads, 1 layers. The preregistered final epoch was evaluated (`fixed_final_epoch`); validation loss did not select the checkpoint. Decoder: greedy byte-level UTF-8 constrained decoding; EOS only at complete codepoint boundaries.
 
 The registered primary objective is `tide`. Frozen thresholds: valid Unicode 100%; checker coverage 100%; single-action fidelity ≥90% and preservation ≥90%; path fidelity ≥80% and preservation ≥80%. Every configured primary condition, seed, and language/action bucket must meet all applicable thresholds.
 
@@ -31,16 +31,6 @@ Action fidelity and preservation are pooled across seeds within each condition a
 
 | Mode | Source-copy weight | TIDE aux multiplier | Edge balance | Decoder | Bucket | Checker coverage | Action fidelity | Preservation | Accepted references | CER | Nonempty | Unicode | EOS |
 |---|---:|---:|---|---|---|---:|---:|---:|---:|---:|---:|---:|---:|
-| tide | 0 | 0 | row_uniform | vocabulary | en/held_out_path/POLARITY:NEGATIVE+TIME:PAST | 480/480 | 354/480 | 13/480 | 10/480 | 18.9% | 480/480 | 480/480 | 480/480 |
-| tide | 0 | 0 | row_uniform | vocabulary | en/single/POLARITY:NEGATIVE | 960/960 | 436/960 | 4/960 | 1/960 | 25.3% | 960/960 | 960/960 | 960/960 |
-| tide | 0 | 0 | row_uniform | vocabulary | en/single/POLARITY:POSITIVE | 960/960 | 482/960 | 1/960 | 0/960 | 33.1% | 960/960 | 960/960 | 960/960 |
-| tide | 0 | 0 | row_uniform | vocabulary | en/single/TIME:NOW | 960/960 | 339/960 | 0/960 | 0/960 | 31.3% | 960/960 | 960/960 | 960/960 |
-| tide | 0 | 0 | row_uniform | vocabulary | en/single/TIME:PAST | 960/960 | 535/960 | 8/960 | 2/960 | 26.4% | 960/960 | 960/960 | 960/960 |
-| tide | 0 | 0 | row_uniform | vocabulary | vi/held_out_path/POLARITY:NEGATIVE+TIME:PAST | 480/480 | 316/480 | 8/480 | 3/480 | 26.7% | 480/480 | 480/480 | 480/480 |
-| tide | 0 | 0 | row_uniform | vocabulary | vi/single/POLARITY:NEGATIVE | 960/960 | 338/960 | 7/960 | 2/960 | 29.6% | 960/960 | 960/960 | 960/960 |
-| tide | 0 | 0 | row_uniform | vocabulary | vi/single/POLARITY:POSITIVE | 960/960 | 246/960 | 0/960 | 0/960 | 36.9% | 960/960 | 960/960 | 960/960 |
-| tide | 0 | 0 | row_uniform | vocabulary | vi/single/TIME:NOW | 960/960 | 286/960 | 4/960 | 2/960 | 34.8% | 960/960 | 960/960 | 960/960 |
-| tide | 0 | 0 | row_uniform | vocabulary | vi/single/TIME:PAST | 960/960 | 350/960 | 4/960 | 2/960 | 30.1% | 960/960 | 960/960 | 960/960 |
 | tide | 0 | 0 | row_uniform | source_pointer | en/held_out_path/POLARITY:NEGATIVE+TIME:PAST | 480/480 | 317/480 | 12/480 | 6/480 | 19.6% | 480/480 | 480/480 | 480/480 |
 | tide | 0 | 0 | row_uniform | source_pointer | en/single/POLARITY:NEGATIVE | 960/960 | 254/960 | 5/960 | 1/960 | 30.4% | 960/960 | 960/960 | 960/960 |
 | tide | 0 | 0 | row_uniform | source_pointer | en/single/POLARITY:POSITIVE | 960/960 | 374/960 | 0/960 | 0/960 | 38.3% | 960/960 | 960/960 | 960/960 |
@@ -51,6 +41,16 @@ Action fidelity and preservation are pooled across seeds within each condition a
 | tide | 0 | 0 | row_uniform | source_pointer | vi/single/POLARITY:POSITIVE | 960/960 | 305/960 | 1/960 | 0/960 | 35.5% | 960/960 | 960/960 | 960/960 |
 | tide | 0 | 0 | row_uniform | source_pointer | vi/single/TIME:NOW | 960/960 | 262/960 | 1/960 | 1/960 | 37.0% | 960/960 | 960/960 | 960/960 |
 | tide | 0 | 0 | row_uniform | source_pointer | vi/single/TIME:PAST | 960/960 | 214/960 | 2/960 | 2/960 | 35.7% | 960/960 | 960/960 | 960/960 |
+| tide | 0 | 0 | row_uniform | vocabulary | en/held_out_path/POLARITY:NEGATIVE+TIME:PAST | 480/480 | 354/480 | 13/480 | 10/480 | 18.9% | 480/480 | 480/480 | 480/480 |
+| tide | 0 | 0 | row_uniform | vocabulary | en/single/POLARITY:NEGATIVE | 960/960 | 436/960 | 4/960 | 1/960 | 25.3% | 960/960 | 960/960 | 960/960 |
+| tide | 0 | 0 | row_uniform | vocabulary | en/single/POLARITY:POSITIVE | 960/960 | 482/960 | 1/960 | 0/960 | 33.1% | 960/960 | 960/960 | 960/960 |
+| tide | 0 | 0 | row_uniform | vocabulary | en/single/TIME:NOW | 960/960 | 339/960 | 0/960 | 0/960 | 31.3% | 960/960 | 960/960 | 960/960 |
+| tide | 0 | 0 | row_uniform | vocabulary | en/single/TIME:PAST | 960/960 | 535/960 | 8/960 | 2/960 | 26.4% | 960/960 | 960/960 | 960/960 |
+| tide | 0 | 0 | row_uniform | vocabulary | vi/held_out_path/POLARITY:NEGATIVE+TIME:PAST | 480/480 | 316/480 | 8/480 | 3/480 | 26.7% | 480/480 | 480/480 | 480/480 |
+| tide | 0 | 0 | row_uniform | vocabulary | vi/single/POLARITY:NEGATIVE | 960/960 | 338/960 | 7/960 | 2/960 | 29.6% | 960/960 | 960/960 | 960/960 |
+| tide | 0 | 0 | row_uniform | vocabulary | vi/single/POLARITY:POSITIVE | 960/960 | 246/960 | 0/960 | 0/960 | 36.9% | 960/960 | 960/960 | 960/960 |
+| tide | 0 | 0 | row_uniform | vocabulary | vi/single/TIME:NOW | 960/960 | 286/960 | 4/960 | 2/960 | 34.8% | 960/960 | 960/960 | 960/960 |
+| tide | 0 | 0 | row_uniform | vocabulary | vi/single/TIME:PAST | 960/960 | 350/960 | 4/960 | 2/960 | 30.1% | 960/960 | 960/960 | 960/960 |
 
 ## Primary-mode validation diagnostics by seed
 

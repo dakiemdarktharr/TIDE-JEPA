@@ -91,9 +91,10 @@ class OfflineGenerator:
         encoded = self.tokenizer.encode(source)
         if not encoded or len(encoded) > self.cfg.max_length:
             raise ValueError("source exceeds configured byte-token length")
-        max_new_tokens = request.get("max_new_tokens", 128)
-        if type(max_new_tokens) is not int or not 0 < max_new_tokens <= min(160, self.cfg.max_length - 1):
-            raise ValueError("max_new_tokens must be an integer from 1 through the demo limit of 160")
+        token_limit = min(160, self.cfg.max_length - 1)
+        max_new_tokens = request.get("max_new_tokens", min(128, token_limit))
+        if type(max_new_tokens) is not int or not 0 < max_new_tokens <= token_limit:
+            raise ValueError(f"max_new_tokens must be an integer from 1 through {token_limit}")
         source_tensor = torch.tensor([encoded], dtype=torch.long, device=self.device)
         language_ids = torch.tensor([self.cfg.languages.index(language)], dtype=torch.long, device=self.device)
         actions_tensor = torch.tensor(action_ids, dtype=torch.long, device=self.device)

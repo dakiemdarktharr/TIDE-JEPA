@@ -23,13 +23,18 @@ def make_handler(generator, metadata):
         def respond(self, status, body, content_type="application/json; charset=utf-8"):
             if isinstance(body, dict):
                 body = json.dumps(body, ensure_ascii=False).encode("utf-8")
-            self.send_response(status)
-            self.send_header("Content-Type", content_type)
-            self.send_header("Content-Length", str(len(body)))
-            self.send_header("Cache-Control", "no-store")
-            self.send_header("X-Content-Type-Options", "nosniff")
-            self.end_headers()
-            self.wfile.write(body)
+            try:
+                self.send_response(status)
+                self.send_header("Content-Type", content_type)
+                self.send_header("Content-Length", str(len(body)))
+                self.send_header("Cache-Control", "no-store")
+                self.send_header("X-Content-Type-Options", "nosniff")
+                self.end_headers()
+                self.wfile.write(body)
+            except OSError:
+                # A disconnected client must not produce a traceback or keep
+                # the inference slot occupied while attempting another reply.
+                self.close_connection = True
 
         def do_GET(self):
             if self.path == "/":
@@ -76,8 +81,9 @@ def make_handler(generator, metadata):
                 actions = value.get("actions")
                 if not isinstance(actions, list) or not 1 <= len(actions) <= 8:
                     raise ValueError("Số hành động vượt phạm vi hỗ trợ.")
-                token_budget = value.get("max_new_tokens", 128)
-                if type(token_budget) is not int or not 0 < token_budget <= 160:
+                token_limit = min(160, getattr(generator.cfg, "max_length", 161) - 1)
+                token_budget = value.get("max_new_tokens", min(128, token_limit))
+                if type(token_budget) is not int or not 0 < token_budget <= token_limit:
                     raise ValueError("Ngân sách token vượt phạm vi hỗ trợ.")
                 if not generation_slot.acquire(blocking=False):
                     self.respond(503, {"error": "Demo đang xử lý yêu cầu khác; vui lòng thử lại."})
@@ -88,6 +94,8 @@ def make_handler(generator, metadata):
                     generation_slot.release()
             except (UnicodeDecodeError, json.JSONDecodeError, TypeError, ValueError, KeyError, TimeoutError, OSError) as error:
                 self.respond(400, {"error": "Yêu cầu không hợp lệ hoặc nằm ngoài phạm vi demo."})
+            except (RuntimeError, FloatingPointError):
+                self.respond(500, {"error": "Mô hình không xử lý được yêu cầu; vui lòng thử lại."})
 
     return Handler
 
@@ -137,7 +145,8 @@ def main():
                 "mode": config["objective"]["mode"], "seed": config["seed"],
                 "pilot_version": version,
                 "primary_quality_mode": protocol.get("primary_quality_mode"),
-                "validation_gate_status": validation_gate}
+                "validation_gate_status": validation_gate,
+                "max_new_tokens": min(160, generator.cfg.max_length - 1)}
     with ThreadingHTTPServer(("127.0.0.1", args.port), make_handler(generator, metadata)) as server:
         print(f"TIDE-JEPA preliminary offline demo: http://127.0.0.1:{args.port}", flush=True)
         try:

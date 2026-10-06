@@ -41,6 +41,7 @@ def diagnose(directory, modes=("tide",), output=None, markdown=None):
                 bucket = (f"{config['objective']['mode']}/seed-{seed}/"
                           f"copy-{config['objective'].get('source_copy_weight', 0):g}/"
                           f"aux-{config['objective'].get('latent_objective_weight', 1):g}/"
+                          f"decoder-{'source_pointer' if config.get('model', {}).get('source_pointer_decoder', False) else 'vocabulary'}/"
                           f"{language}/{task}/{item.get('action_key', 'aggregate')}")
                 counts = results.setdefault(bucket, {
                     "examples": 0, "checker_covered": 0,
@@ -80,8 +81,8 @@ def diagnose(directory, modes=("tide",), output=None, markdown=None):
     }
     summary = {}
     for bucket, counts in results.items():
-        mode, _seed, copy_weight, aux_weight, language, task, _action = bucket.split("/", 6)
-        key = f"{mode}/{copy_weight}/{aux_weight}/{language}/{task}"
+        mode, _seed, copy_weight, aux_weight, decoder, language, task, _action = bucket.split("/", 7)
+        key = f"{mode}/{copy_weight}/{aux_weight}/{decoder}/{language}/{task}"
         total = summary.setdefault(key, {"examples": 0, "checker_covered": 0,
                                          "action_fidelity_pass": 0, "preservation_pass": 0,
                                          "agent_preserved": 0, "patient_preserved": 0,
@@ -106,10 +107,9 @@ def diagnose(directory, modes=("tide",), output=None, markdown=None):
         lines = [
             f"# {version} post-hoc semantic rescore",
             "",
-            "This is a diagnostic rescore of saved validation generations after discovering that the frozen evaluator omitted v4.18 event families. It is **not frozen-protocol gate evidence** and does not authorize opening the release holdout.",
+            "This is a post-hoc component diagnostic of saved validation generations with the current semantic checker. It is **not frozen-protocol gate evidence** and does not authorize opening the release holdout.",
             "",
-            "The original evaluator had zero semantic checker coverage (`0/0` action fidelity and preservation denominators). After adding v4.18 coverage to the checker, this rescore covers every saved validation example. Results remain preliminary AI-authored synthetic evidence; `human_validated=false`, `phomt_used=false`.",
-            "The component breakdown shows that single-action patient presence is 7.7–22.1% and predicate presence is 5.2–11.2% across conditions; these source-slot and transformation deficits explain much of the low joint-preservation score.",
+            "Results remain preliminary AI-authored synthetic evidence; `human_validated=false`, `phomt_used=false`. Coverage and role-preservation denominators are shown below; unscored values are n/a. Decoder variants are reported separately.",
             "",
             f"Frozen training protocol SHA-256: `{protocol_sha}`.",
             "",
@@ -117,20 +117,22 @@ def diagnose(directory, modes=("tide",), output=None, markdown=None):
             "|---|---|---|---:|---:|---:|---:|---:|---:|---:|---:|",
         ]
         for key, counts in sorted(summary.items()):
-            mode, copy_weight, aux_weight, language, task = key.split("/")
+            mode, copy_weight, aux_weight, decoder, language, task = key.split("/")
+            fidelity_rate = counts['action_fidelity_rate']
+            preservation_rate = counts['preservation_rate']
             fidelity = (f"{counts['action_fidelity_pass']}/{counts['checker_covered']} "
-                        f"({counts['action_fidelity_rate']:.1%})")
+                        + (f"({fidelity_rate:.1%})" if fidelity_rate is not None else "(n/a)"))
             preservation = (f"{counts['preservation_pass']}/{counts['checker_covered']} "
-                            f"({counts['preservation_rate']:.1%})")
+                            + (f"({preservation_rate:.1%})" if preservation_rate is not None else "(n/a)"))
             rates = [counts[f"{field}_rate"] for field in
                      ("agent_preserved", "patient_preserved", "predicate_preserved", "place_preserved")]
             component_cells = [f"{rate:.1%}" if rate is not None else "n/a" for rate in rates]
-            lines.append(f"| {mode}, copy {copy_weight.removeprefix('copy-')}, aux {aux_weight.removeprefix('aux-')} | {language} | {task} | {counts['examples']} | {counts['checker_covered']}/{counts['examples']} ({counts['checker_coverage_rate']:.1%}) | {fidelity} | {component_cells[0]} | {component_cells[1]} | {component_cells[2]} | {component_cells[3]} | {preservation} |")
+            lines.append(f"| {mode}, copy {copy_weight.removeprefix('copy-')}, aux {aux_weight.removeprefix('aux-')}, {decoder.removeprefix('decoder-')} | {language} | {task} | {counts['examples']} | {counts['checker_covered']}/{counts['examples']} ({counts['checker_coverage_rate']:.1%}) | {fidelity} | {component_cells[0]} | {component_cells[1]} | {component_cells[2]} | {component_cells[3]} | {preservation} |")
         lines += [
             "",
-            "The rescore does not pass the preregistered single-action (≥90%) or held-out-path (≥80%) thresholds. Its post-hoc timing means it is diagnostic only; any follow-up quality gate must use a fresh version with the corrected evaluator frozen before training/evaluation. The release holdout remains sealed.",
+            "This component diagnostic does not change the frozen gate or its thresholds. Any follow-up quality experiment must use a fresh reviewed version; the release holdout remains sealed unless the original frozen validation gates pass.",
             "",
-            "To reproduce without printing examples: `.venv/bin/python -B scripts/diagnose_validation_preservation.py data/pilot/vi-en-ai-v4.18 --markdown VI_EN_RESULTS_V4.18_RESCORING.md`.",
+            f"To reproduce without printing examples: `.venv/bin/python -B scripts/diagnose_validation_preservation.py data/pilot/{base.name} --markdown YOUR_DIAGNOSTIC.md`.",
             "",
             "The script reads private validation generations but emits only aggregate counts; all private rows and generations remain Git-ignored under `data/` and `runs/`.",
         ]

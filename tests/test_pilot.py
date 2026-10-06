@@ -60,6 +60,20 @@ class SourceSelectionTests(unittest.TestCase):
 
 
 class SeedAuthoringTests(unittest.TestCase):
+    def test_registered_primary_matrix_includes_decoder_and_rejects_duplicates(self):
+        from tide_jepa.pilot import _registered_primary_configs
+        protocol = {"primary_quality_mode": "tide", "seeds": [17, 23],
+                    "primary_source_copy_weights": [0.0], "primary_latent_objective_weights": [0.0],
+                    "primary_source_pointer_decoder_modes": ["vocabulary", "source_pointer"]}
+        configs = [(f"{seed}-{pointer}.json", {
+            "seed": seed, "objective": {"mode": "tide", "latent_objective_weight": 0.0},
+            "model": {"source_pointer_decoder": pointer}})
+            for seed in protocol["seeds"] for pointer in (False, True)]
+        self.assertEqual(_registered_primary_configs(protocol, configs), configs)
+        for invalid in (configs[:-1], configs + [configs[0]], configs[:-1] + [configs[0]]):
+            with self.assertRaisesRegex(ValueError, "decoder condition"):
+                _registered_primary_configs(protocol, invalid)
+
     def test_quality_gate_applies_to_frozen_primary_mode_only(self):
         from tide_jepa.pilot import _quality_gate_status
         passing = {"en/single/action": {"valid_unicode_pass": True,
@@ -75,6 +89,8 @@ class SeedAuthoringTests(unittest.TestCase):
         self.assertEqual(_quality_gate_status("tide", "tide", failing), "fail")
         self.assertEqual(_quality_gate_status("tide", "tide", uncovered), "fail")
         self.assertEqual(_quality_gate_status("tide", "token_only", failing), "control_only")
+        self.assertEqual(_quality_gate_status("tide", "tide", {"bucket": {}}), "fail")
+        self.assertEqual(_quality_gate_status("tide", "tide", {"bucket": {"pass": "false"}}), "fail")
         self.assertEqual(_quality_gate_status("tide", "tide", {}), "fail")
 
     def test_v43_is_frame_disjoint_compositional_split(self):
@@ -891,6 +907,64 @@ class SeedAuthoringTests(unittest.TestCase):
 
 class DemoAPITests(unittest.TestCase):
     @unittest.skipUnless(TORCH_AVAILABLE, "PyTorch is required for offline inference")
+    def test_inference_default_budget_fits_small_checkpoint(self):
+        from types import SimpleNamespace
+        import torch
+        from tide_jepa.data import UTF8ByteTokenizer
+        from tide_jepa.infer import OfflineGenerator
+        generator = OfflineGenerator.__new__(OfflineGenerator)
+        generator.cfg = SimpleNamespace(languages=("en", "vi"), max_length=12)
+        generator.device = "cpu"
+        generator.tokenizer = UTF8ByteTokenizer()
+        generator.inventory = SimpleNamespace(require=lambda *_: 0)
+        budgets = []
+        def generate(*args):
+            budgets.append(args[-1])
+            return torch.tensor([[1, 2]])
+        generator.model = SimpleNamespace(generate=generate)
+        request = {"source": "Test", "source_language": "en", "target_language": "en",
+                   "actions": [{"kind": "TIME", "value": "PAST"}]}
+        self.assertTrue(generator.generate(request)["valid_utf8"])
+        self.assertEqual(budgets, [11])
+        with self.assertRaisesRegex(ValueError, "through 11"):
+            generator.generate({**request, "max_new_tokens": 12})
+
+    def test_demo_recovers_inference_slot_after_model_error(self):
+        from http.server import ThreadingHTTPServer
+        from threading import Thread
+        from types import SimpleNamespace
+        from urllib.error import HTTPError
+        from urllib.request import Request, urlopen
+        from tide_jepa.demo import make_handler
+        class FailingOnce:
+            cfg = SimpleNamespace(languages=("en", "vi"))
+            calls = 0
+            def generate(self, _value):
+                self.calls += 1
+                if self.calls == 1:
+                    raise RuntimeError("internal model details must stay private")
+                return {"generated_text": "synthetic", "valid_utf8": True}
+        server = ThreadingHTTPServer(("127.0.0.1", 0), make_handler(FailingOnce(), {}))
+        worker = Thread(target=server.serve_forever, daemon=True)
+        worker.start()
+        url = f"http://127.0.0.1:{server.server_port}/generate"
+        body = json.dumps({"source_language": "en", "target_language": "en",
+                           "actions": [{"kind": "TIME", "value": "PAST"}]}).encode()
+        def request():
+            return Request(url, data=body, headers={"Content-Type": "application/json"})
+        try:
+            with self.assertRaises(HTTPError) as raised:
+                urlopen(request(), timeout=2)
+            self.assertEqual(raised.exception.code, 500)
+            self.assertNotIn("internal model", raised.exception.read().decode())
+            with urlopen(request(), timeout=2) as response:
+                self.assertEqual(response.status, 200)
+        finally:
+            server.shutdown()
+            server.server_close()
+            worker.join(timeout=2)
+
+    @unittest.skipUnless(TORCH_AVAILABLE, "PyTorch is required for offline inference")
     def test_inference_rejects_malformed_actions_before_model_work(self):
         from types import SimpleNamespace
         from tide_jepa.infer import OfflineGenerator
@@ -1133,6 +1207,17 @@ class PilotWorkflowTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "review missing"):
             freeze_pilot(self.base, epochs=1, seeds=(17,))
 
+    def test_freeze_rejects_invalid_learning_rate_and_actual_length_before_publication(self):
+        from tide_jepa.pilot import freeze_pilot
+        self.write_reviews()
+        for rate in (float("nan"), float("inf"), True, "bad", 0):
+            with self.subTest(rate=rate), self.assertRaises(ValueError):
+                freeze_pilot(self.base, learning_rate=rate)
+        with self.assertRaisesRegex(ValueError, "maximum length"):
+            freeze_pilot(self.base, max_length=8)
+        self.assertFalse((self.base / "approval.json").exists())
+        self.assertFalse((self.base / "corpus.jsonl").exists())
+
     def test_pending_review_requires_explicit_artifact_bound_adjudication(self):
         from tide_jepa.pilot import REVIEWED_ARTIFACTS, freeze_pilot
         self.write_reviews()
@@ -1355,6 +1440,32 @@ class PilotWorkflowTests(unittest.TestCase):
         })
         self.assertTrue(response["valid_utf8"])
         self.assertEqual(response["quality_status"], "diagnostic_only")
+
+    def test_release_gate_accepts_decoder_matrix_then_refuses_missing_validation(self):
+        from tide_jepa.experiment import run_experiment, _parse_inventory
+        from tide_jepa.data import read_split_manifest
+        from tide_jepa.pilot import freeze_pilot, _require_release_test_gate
+        self.write_reviews()
+        freeze_pilot(self.base, epochs=1, seeds=(17,), model_width=8, model_heads=2,
+                     condition_modes=("tide",),
+                     condition_source_pointer_decoder_modes=("vocabulary", "source_pointer"))
+        protocol = json.loads((self.base / "protocol.json").read_text())
+        for index, name in enumerate(protocol["configs"]):
+            path = self.base / name
+            config = json.loads(path.read_text())
+            config["output_dir"] = str(self.base / f"local-decoder-{index}")
+            path.write_text(json.dumps(config))
+            protocol["config_files_sha256"][name] = hashlib.sha256(path.read_bytes()).hexdigest()
+        (self.base / "protocol.json").write_text(json.dumps(protocol))
+        with redirect_stdout(io.StringIO()):
+            for name in protocol["configs"]:
+                run_experiment(self.base / name, device="cpu")
+        inventory = _parse_inventory(json.loads((self.base / "inventory.json").read_text()))
+        rows = read_jsonl(self.base / "corpus.jsonl", inventory)
+        manifest = read_split_manifest(self.base / "split_manifest.json", rows, inventory)
+        with self.assertRaisesRegex(ValueError, "validation generation evidence is missing"):
+            _require_release_test_gate(self.base, protocol, manifest, rows)
+        self.assertFalse(any(self.base.glob("local-decoder-*/test_metrics.json")))
 
     def test_invalid_alignment_does_not_publish_approved_artifacts(self):
         from tide_jepa.pilot import freeze_pilot

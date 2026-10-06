@@ -6,6 +6,12 @@ import hashlib
 import json
 from pathlib import Path
 import statistics
+import sys
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(PROJECT_ROOT))
+
+from tide_jepa.pilot import _registered_primary_configs
 
 
 SCORE_FIELDS = (
@@ -17,6 +23,11 @@ SCORE_FIELDS = (
 
 def _sha256(path):
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
+
+
+def _canonical_hash(value):
+    return hashlib.sha256(json.dumps(value, ensure_ascii=False, sort_keys=True,
+                                     separators=(",", ":")).encode("utf-8")).hexdigest()
 
 
 def summarize_validation(directory, destination):
@@ -34,8 +45,12 @@ def summarize_validation(directory, destination):
         raise ValueError("protocol has duplicate config registrations")
 
     results = []
+    named_configs = []
     for name in protocol["configs"]:
+        if _sha256(base / name) != protocol.get("config_files_sha256", {}).get(name):
+            raise ValueError("registered config identity changed")
         config = json.loads((base / name).read_text(encoding="utf-8"))
+        named_configs.append((name, config))
         output = (base / config["output_dir"]).resolve()
         if (output / "test_metrics.json").exists() or (output / "generation_metrics.json").exists():
             raise ValueError("release-test metrics exist; validation-only report is not applicable")
@@ -43,6 +58,29 @@ def summarize_validation(directory, destination):
         if not generation_path.is_file() or not (output / "best.pt").is_file():
             raise FileNotFoundError("all training and validation generation must finish first")
         generation = json.loads(generation_path.read_text(encoding="utf-8"))
+        resolved = json.loads((output / "resolved_run.json").read_text(encoding="utf-8"))
+        identity_keys = ("config", "corpus_sha256", "split_sha256", "inventory_sha256",
+                         "alignments_sha256", "implementation_sha256", "runtime", "review_approval_sha256")
+        identity = {key: resolved[key] for key in identity_keys if key in resolved}
+        expected_identity = _canonical_hash({
+            "checkpoint_sha256": _sha256(output / "best.pt"),
+            "run_sha256": resolved.get("run_sha256"),
+            "corpus_sha256": manifest["dataset_sha256"],
+            "split_sha256": _canonical_hash(manifest),
+            "protocol_sha256": _sha256(base / "protocol.json"),
+            "evaluation_split": "validation",
+            "evaluator_sha256": {key: value for key, value in protocol["implementation_sha256"].items()
+                                 if key in {"pilot.py", "infer.py", "data.py"}},
+            "decoder_policy": {"max_new_tokens": protocol["generation_max_new_tokens"],
+                               "source_language_equals_target": True},
+        })
+        if (resolved.get("config") != config or resolved.get("run_sha256") != _canonical_hash(identity)
+                or resolved.get("implementation_sha256") != protocol["implementation_sha256"]
+                or resolved.get("runtime") != protocol["runtime"]
+                or generation.get("evaluation_split") != "validation"
+                or generation.get("_evaluation_identity") != expected_identity
+                or generation.get("human_validated") is not False):
+            raise ValueError("validation report differs from frozen run/checkpoint/protocol identity")
         metrics_path = output / "metrics.csv"
         with metrics_path.open(encoding="utf-8", newline="") as stream:
             metrics = list(csv.DictReader(stream))
@@ -50,8 +88,11 @@ def summarize_validation(directory, destination):
         train_rows = [row for row in metrics if row["split"] == "train"]
         if not validation_rows or not train_rows:
             raise ValueError("training metrics lack train or validation records")
+        expected_epochs = list(range(1, protocol["epochs"] + 1))
+        if any([int(row["epoch"]) for row in partition] != expected_epochs
+               for partition in (train_rows, validation_rows)):
+            raise ValueError("training metrics do not contain every registered epoch exactly once")
         final_validation = validation_rows[-1]
-        steps_per_epoch = int(train_rows[-1]["updates"])
         results.append({
             "config": name,
             "mode": config["objective"]["mode"],
@@ -59,6 +100,7 @@ def summarize_validation(directory, destination):
             "latent_objective_weight": (config["objective"].get("latent_objective_weight", 1.0)
                                         if config["objective"]["mode"] == "tide" else None),
             "transition_balance": config.get("training", {}).get("transition_balance", "row_uniform"),
+            "decoder": "source_pointer" if config.get("model", {}).get("source_pointer_decoder", False) else "vocabulary",
             "seed": config["seed"],
             "generation": generation,
             "last_val_token_ce": float(final_validation["token"]),
@@ -66,7 +108,7 @@ def summarize_validation(directory, destination):
             "last_val_path_token_ce": float(final_validation["path_token"]),
             "train_wall_seconds": sum(float(row["seconds"]) for row in train_rows),
             "mean_examples_per_second": statistics.mean(float(row["examples_per_second"]) for row in train_rows),
-            "updates": int(config["training"]["epochs"]) * steps_per_epoch,
+            "updates": sum(int(row["updates"]) for row in train_rows),
         })
     if {item["config"] for item in results} != expected:
         raise ValueError("validation evidence does not cover every frozen config")
@@ -75,26 +117,12 @@ def summarize_validation(directory, destination):
     seeds = protocol["seeds"]
     primary = protocol["primary_quality_mode"]
     buckets = sorted(results[0]["generation"]["scores"])
-    primary_runs = [item for item in results if item["mode"] == primary]
-    actual_weights = {item["source_copy_weight"] for item in primary_runs}
-    primary_weights = ({float(weight) for weight in protocol["primary_source_copy_weights"]}
-                       if "primary_source_copy_weights" in protocol else actual_weights)
-    primary_latent_weights = protocol.get("primary_latent_objective_weights")
-    primary_balances = set(protocol.get("primary_transition_balance_modes", ["row_uniform"]))
-    if primary_latent_weights is None:
-        expected_primary = {(seed, weight, balance) for seed in seeds for weight in primary_weights
-                            for balance in primary_balances}
-        actual_primary = {(item["seed"], item["source_copy_weight"], item["transition_balance"])
-                          for item in primary_runs}
-    else:
-        primary_latent_weights = {float(weight) for weight in primary_latent_weights}
-        expected_primary = {(seed, weight, latent_weight, balance) for seed in seeds for weight in primary_weights
-                            for latent_weight in primary_latent_weights for balance in primary_balances}
-        actual_primary = {(item["seed"], item["source_copy_weight"], item["latent_objective_weight"],
-                           item["transition_balance"])
-                          for item in primary_runs}
-    if len(primary_runs) != len(expected_primary) or actual_primary != expected_primary:
-        raise ValueError("primary validation evidence does not cover every frozen seed")
+    if not buckets:
+        raise ValueError("validation reports have no scored buckets")
+    primary_names = {name for name, _ in _registered_primary_configs(protocol, named_configs)}
+    primary_runs = [item for item in results if item["config"] in primary_names]
+    if any(set(item["generation"]["scores"]) != set(buckets) for item in results):
+        raise ValueError("validation reports have inconsistent bucket coverage")
     quality_pass = all(item["generation"]["quality_gate"]["status"] == "pass"
                        for item in primary_runs)
     checker_coverage_complete = all(
@@ -114,38 +142,45 @@ def summarize_validation(directory, destination):
         "Objective conditions: " + "; ".join(
             f"{mode} with source-copy weight {weight:g}" +
             (f" and TIDE latent-objective multiplier {latent:g}" if latent is not None else "") +
-            f"; transition balance `{balance}`"
-            for mode, weight, latent, balance in sorted({(item["mode"], item["source_copy_weight"], item["latent_objective_weight"], item["transition_balance"])
-                                                for item in results}, key=lambda value: (value[0], value[1], value[2] or 0.0, value[3])))
+            f"; transition balance `{balance}`; decoder `{decoder}`"
+            for mode, weight, latent, balance, decoder in sorted({(item["mode"], item["source_copy_weight"], item["latent_objective_weight"], item["transition_balance"], item["decoder"])
+                                                for item in results}, key=lambda value: (value[0], value[1], value[2] or 0.0, value[3], value[4])))
         + f". Seeds {', '.join(map(str, seeds))}; {protocol['epochs']} epochs and {results[0]['updates']} updates/config; width {protocol['model']['width']}, {protocol['model']['heads']} heads, {protocol['model']['layers']} layers. "
         + (f"The preregistered final epoch was evaluated (`{protocol['checkpoint_selection_policy']}`); validation loss did not select the checkpoint. "
            if protocol.get("checkpoint_selection_policy") == "fixed_final_epoch" else
            "Checkpoints were selected using the frozen validation criterion. ")
         + f"Decoder: {protocol['decoder_policy']}.", "",
-        f"The registered primary objective is `{primary}`. Frozen thresholds: valid Unicode 100%; single-action action fidelity and preservation each ≥90%; held-out-path action fidelity and preservation each ≥80%. Every configured primary weight, seed, and language/action bucket must meet all applicable thresholds.", "",
+        f"The registered primary objective is `{primary}`. Frozen thresholds: "
+        f"valid Unicode {protocol['quality_thresholds']['valid_unicode_rate']:.0%}; "
+        f"checker coverage {protocol['quality_thresholds'].get('semantic_checker_coverage_rate', 1.0):.0%}; "
+        f"single-action fidelity ≥{protocol['quality_thresholds']['single_action_action_fidelity_rate']:.0%} "
+        f"and preservation ≥{protocol['quality_thresholds']['single_action_preservation_rate']:.0%}; "
+        f"path fidelity ≥{protocol['quality_thresholds']['held_out_path_action_fidelity_rate']:.0%} "
+        f"and preservation ≥{protocol['quality_thresholds']['held_out_path_preservation_rate']:.0%}. "
+        "Every configured primary condition, seed, and language/action bucket must meet all applicable thresholds.", "",
         ("## Validation result: **PASS**" if quality_pass and checker_coverage_complete else
          "## Validation result: **INVALID / FAIL-CLOSED — semantic checker coverage incomplete**"
          if not checker_coverage_complete else "## Validation result: **FAIL**"), "",
         ("Semantic quality gates are not interpretable because one or more buckets lack complete checker coverage. The gate fails closed and the release holdout remains sealed; `0/0` is an unscored denominator, not a 0% model score. See checker-coverage counts below."
          if not checker_coverage_complete else "Semantic checker coverage is complete across all primary buckets."), "",
         "The release holdout was not evaluated and remains sealed.", "",
-        "| Mode | Source-copy weight | TIDE aux multiplier | Edge balance | Seed | Train token CE | Val token CE | Val path token CE | Updates | Training wall seconds | Mean examples/sec | Gate |", "|---|---:|---:|---|---:|---:|---:|---:|---:|---:|---:|---|"
+        "| Mode | Source-copy weight | TIDE aux multiplier | Edge balance | Decoder | Seed | Train token CE | Val token CE | Val path token CE | Updates | Training wall seconds | Mean examples/sec | Gate |", "|---|---:|---:|---|---|---:|---:|---:|---:|---:|---:|---:|---|"
     ]
     for item in results:
         gate = item["generation"]["quality_gate"]["status"]
         latent = "—" if item["latent_objective_weight"] is None else f"{item['latent_objective_weight']:g}"
-        lines.append(f"| {item['mode']} | {item['source_copy_weight']:g} | {latent} | {item['transition_balance']} | {item['seed']} | {item['last_train_token_ce']:.4f} | {item['last_val_token_ce']:.4f} | {item['last_val_path_token_ce']:.4f} | {item['updates']} | {item['train_wall_seconds']:.1f} | {item['mean_examples_per_second']:.1f} | {gate} |")
+        lines.append(f"| {item['mode']} | {item['source_copy_weight']:g} | {latent} | {item['transition_balance']} | {item['decoder']} | {item['seed']} | {item['last_train_token_ce']:.4f} | {item['last_val_token_ce']:.4f} | {item['last_val_path_token_ce']:.4f} | {item['updates']} | {item['train_wall_seconds']:.1f} | {item['mean_examples_per_second']:.1f} | {gate} |")
 
     lines += ["", "## Validation generation by condition and bucket", "",
               "Action fidelity and preservation are pooled across seeds within each condition and bucket; thresholds are still checked for every primary condition/seed/bucket. Exact-reference match and CER are synthetic-reference metrics, not human naturalness.", "",
-              "| Mode | Source-copy weight | TIDE aux multiplier | Edge balance | Bucket | Checker coverage | Action fidelity | Preservation | Accepted references | CER | Nonempty | Unicode | EOS |", "|---|---:|---:|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---|"]
-    conditions = sorted({(item["mode"], item["source_copy_weight"], item["latent_objective_weight"], item["transition_balance"])
-                         for item in results}, key=lambda value: (value[0], value[1], value[2] or 0.0, value[3]))
-    for mode, copy_weight, latent_weight, transition_balance in conditions:
+              "| Mode | Source-copy weight | TIDE aux multiplier | Edge balance | Decoder | Bucket | Checker coverage | Action fidelity | Preservation | Accepted references | CER | Nonempty | Unicode | EOS |", "|---|---:|---:|---|---|---|---:|---:|---:|---:|---:|---:|---:|---:|"]
+    conditions = sorted({(item["mode"], item["source_copy_weight"], item["latent_objective_weight"], item["transition_balance"], item["decoder"])
+                         for item in results}, key=lambda value: (value[0], value[1], value[2] or 0.0, value[3], value[4]))
+    for mode, copy_weight, latent_weight, transition_balance, decoder in conditions:
         condition_runs = [item for item in results
                           if item["mode"] == mode and item["source_copy_weight"] == copy_weight
                           and item["latent_objective_weight"] == latent_weight
-                          and item["transition_balance"] == transition_balance]
+                          and item["transition_balance"] == transition_balance and item["decoder"] == decoder]
         for bucket in buckets:
             scores = [item["generation"]["scores"][bucket] for item in condition_runs]
             sums = {key: sum(score[key] for score in scores) for key in SCORE_FIELDS}
@@ -158,13 +193,13 @@ def summarize_validation(directory, destination):
             eos_rate = f"{sums['terminated_eos']}/{sums['examples']}"
             nonempty_rate = f"{sums['nonempty']}/{sums['examples']}"
             latent = "—" if latent_weight is None else f"{latent_weight:g}"
-            lines.append(f"| {mode} | {copy_weight:g} | {latent} | {transition_balance} | {bucket} | {coverage} | {action} | {preserve} | {accepted} | {cer:.1%} | {nonempty_rate} | {unicode_rate} | {eos_rate} |")
+            lines.append(f"| {mode} | {copy_weight:g} | {latent} | {transition_balance} | {decoder} | {bucket} | {coverage} | {action} | {preserve} | {accepted} | {cer:.1%} | {nonempty_rate} | {unicode_rate} | {eos_rate} |")
 
     lines += ["", "## Primary-mode validation diagnostics by seed", "",
               "Counts below preserve the frozen seed-by-seed gate denominator. No generated or reference text is included.", "",
-              "| Source-copy weight | TIDE aux multiplier | Edge balance | Seed | Bucket | Checker coverage | Action fidelity | Preservation | Accepted references | CER | Unicode | EOS | Failure reason | Bucket gate |",
-              "|---:|---:|---|---:|---|---:|---:|---:|---:|---:|---:|---:|---|---|"]
-    for item in sorted(primary_runs, key=lambda value: (value["source_copy_weight"], value["latent_objective_weight"] or 0.0, value["transition_balance"], value["seed"])):
+              "| Source-copy weight | TIDE aux multiplier | Edge balance | Decoder | Seed | Bucket | Checker coverage | Action fidelity | Preservation | Accepted references | CER | Unicode | EOS | Failure reason | Bucket gate |",
+              "|---:|---:|---|---|---:|---|---:|---:|---:|---:|---:|---:|---:|---|---|"]
+    for item in sorted(primary_runs, key=lambda value: (value["source_copy_weight"], value["latent_objective_weight"] or 0.0, value["transition_balance"], value["decoder"], value["seed"])):
         generation = item["generation"]
         checks = generation["quality_gate"]["bucket_checks"]
         for bucket in buckets:
@@ -182,7 +217,8 @@ def summarize_validation(directory, destination):
             if score.get("checker_coverage", 0) != score.get("examples"):
                 failures.append("semantic_checker_coverage")
             failure_reason = ", ".join(failures) if failures else "—"
-            lines.append(f"| {item['source_copy_weight']:g} | {item['latent_objective_weight']:g} | {item['transition_balance']} | {item['seed']} | {bucket} | {coverage} | {action} | {preserve} | {accepted} | {cer:.1%} | {unicode_rate} | {eos_rate} | {failure_reason} | {bucket_gate} |")
+            latent = "—" if item["latent_objective_weight"] is None else f"{item['latent_objective_weight']:g}"
+            lines.append(f"| {item['source_copy_weight']:g} | {latent} | {item['transition_balance']} | {item['decoder']} | {item['seed']} | {bucket} | {coverage} | {action} | {preserve} | {accepted} | {cer:.1%} | {unicode_rate} | {eos_rate} | {failure_reason} | {bucket_gate} |")
 
     lines += ["", "## Limits and interpretation", "",
               "Valid Unicode and EOS termination do not establish semantic correctness. The deterministic checker covers only the declared synthetic tense/polarity grammar and named roles. This benchmark tests recombination of familiar lexical factors; it does not establish naturalness, natural-corpus efficacy, or scientific efficacy. Control results are diagnostic; no TIDE advantage is claimed.", "",

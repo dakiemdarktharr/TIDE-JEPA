@@ -31,12 +31,23 @@ def _train_one(base_text, config_name):
 
 
 def train_all(directory, *, workers=4):
+    from tide_jepa.experiment import _implementation_identity, _runtime_identity
+    from tide_jepa.pilot import _hash_file
+
     base = Path(directory).resolve()
     protocol = json.loads((base / "protocol.json").read_text(encoding="utf-8"))
     if (base / "suite_report.json").exists():
         raise FileExistsError("suite is already evaluated; preserve it and use another pilot version")
     if type(workers) is not int or not 1 <= workers <= 8:
         raise ValueError("workers must be an integer in 1..8")
+    names = protocol.get("configs", [])
+    if not names or len(names) != len(set(names)):
+        raise ValueError("protocol needs unique registered configs")
+    if (protocol.get("implementation_sha256") != _implementation_identity()
+            or protocol.get("runtime") != _runtime_identity()
+            or protocol.get("approval_sha256") != _hash_file(base / "approval.json")
+            or protocol.get("config_files_sha256") != {name: _hash_file(base / name) for name in names}):
+        raise ValueError("current config/approval/code/runtime differs from frozen training protocol")
     results = []
     with ProcessPoolExecutor(max_workers=workers) as pool:
         pending = {pool.submit(_train_one, str(base), name): name for name in protocol["configs"]}

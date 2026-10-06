@@ -87,6 +87,17 @@ class ModelTests(unittest.TestCase):
         self.assertGreater(metrics["loss"], 0)
         self.assertFalse(torch.equal(old_online, self.model.online.tokens.weight))
 
+    def test_token_loss_is_invariant_to_uniform_edge_weight_scaling(self):
+        objective = Objective(mode="token_only")
+        loss, _ = compute_loss(self.model, self.batch, self.inventory, objective)
+        small = replace(self.batch, edge_weights=torch.full((2,), 0.01))
+        scaled_loss, metrics = compute_loss(self.model, small, self.inventory, objective)
+        self.assertLess(metrics["token_count"], 1)
+        torch.testing.assert_close(loss, scaled_loss)
+        original_gradient = torch.autograd.grad(loss, self.model.output.weight)[0]
+        scaled_gradient = torch.autograd.grad(scaled_loss, self.model.output.weight)[0]
+        torch.testing.assert_close(original_gradient, scaled_gradient)
+
     def test_source_copy_loss_is_optional_and_uses_aligned_target_denominator(self):
         mask = torch.zeros_like(self.batch.labels, dtype=torch.bool)
         mask[:, :2] = True

@@ -28,7 +28,8 @@ REVIEWED_ARTIFACTS = ("inventory.draft.json", "alignments.draft.json", "groups.j
 def _quality_gate_status(primary_mode, objective_mode, bucket_checks):
     if objective_mode != primary_mode:
         return "control_only"
-    return "pass" if bucket_checks and all(all(check.values()) for check in bucket_checks.values()) else "fail"
+    return "pass" if bucket_checks and all(check and all(value is True for value in check.values())
+                                          for check in bucket_checks.values()) else "fail"
 
 
 def _read(path):
@@ -56,6 +57,36 @@ def _hash_file(path):
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 
 
+def _registered_primary_configs(protocol, named_configs):
+    """Check the complete registered factorial, including decoder variants."""
+    primary = protocol.get("primary_quality_mode")
+    configs = [(name, config) for name, config in named_configs
+               if config.get("objective", {}).get("mode") == primary]
+    weights = set(protocol.get("primary_source_copy_weights", [
+        config.get("objective", {}).get("source_copy_weight", 0.0) for _, config in configs]))
+    latent_weights = set(protocol.get("primary_latent_objective_weights", [
+        config.get("objective", {}).get("latent_objective_weight", 1.0) for _, config in configs]))
+    balances = set(protocol.get("primary_transition_balance_modes", ["row_uniform"]))
+    decoders = set(protocol.get("primary_source_pointer_decoder_modes", ["vocabulary"]))
+    selected = []
+    signatures = []
+    for name, config in configs:
+        objective = config.get("objective", {})
+        weight = objective.get("source_copy_weight", 0.0)
+        latent = objective.get("latent_objective_weight", 1.0)
+        balance = config.get("training", {}).get("transition_balance", "row_uniform")
+        decoder = "source_pointer" if config.get("model", {}).get("source_pointer_decoder", False) else "vocabulary"
+        if weight in weights and latent in latent_weights and balance in balances and decoder in decoders:
+            selected.append((name, config))
+            signatures.append((config.get("seed"), weight, latent, balance, decoder))
+    expected = {(seed, weight, latent, balance, decoder)
+                for seed in protocol.get("seeds", []) for weight in weights
+                for latent in latent_weights for balance in balances for decoder in decoders}
+    if not expected or len(signatures) != len(expected) or set(signatures) != expected:
+        raise ValueError("primary validation evidence does not cover every frozen seed/objective/decoder condition")
+    return selected
+
+
 def freeze_pilot(directory, *, epochs=40, seeds=(17, 23, 41), model_width=32,
                  model_heads=4, model_layers=1, max_length=192, batch_size=80,
                  learning_rate=0.001, primary_mode="tide", source_copy_weight=0.0,
@@ -78,7 +109,9 @@ def freeze_pilot(directory, *, epochs=40, seeds=(17, 23, 41), model_width=32,
         raise ValueError("epochs and independent integer seeds are required")
     if (any(type(value) is not int or value <= 0 for value in
             (model_width, model_heads, model_layers, max_length, batch_size))
-            or model_width % model_heads != 0 or learning_rate <= 0):
+            or model_width % model_heads != 0
+            or type(learning_rate) not in {int, float}
+            or not math.isfinite(learning_rate) or learning_rate <= 0):
         raise ValueError("model dimensions, batch size, and learning rate must be positive and compatible")
     if not isinstance(source_copy_weight, (int, float)) or isinstance(source_copy_weight, bool) or not math.isfinite(source_copy_weight) or source_copy_weight < 0:
         raise ValueError("source_copy_weight must be a finite nonnegative number")
@@ -207,7 +240,12 @@ def freeze_pilot(directory, *, epochs=40, seeds=(17, 23, 41), model_width=32,
                               for name in ("train", "validation", "test")})
     approved_inventory = {"actions": draft_inventory["actions"], "approved_by_language": {"en": proposed["en"], "vi": proposed["vi"], "cham_phan_rang": []}}
     alignments = _read(base / "alignments.draft.json")
-    cfg = ModelConfig(vocab_size=259, action_count=len(actions), width=32, heads=4, layers=1, max_length=192, languages=("en", "vi"))
+    cfg = ModelConfig(vocab_size=259, action_count=len(actions), width=model_width,
+                      heads=model_heads, layers=model_layers, max_length=max_length,
+                      languages=("en", "vi"))
+    generation_budget = min(160, max_length - 1)
+    if generation_budget < 1:
+        raise ValueError("max_length must leave room for BOS and a generated token")
     with tempfile.TemporaryDirectory(prefix=".freeze-", dir=base) as temporary:
         stage = Path(temporary)
         (stage / "corpus.jsonl").write_text("".join(json.dumps(r.to_dict(), ensure_ascii=False, sort_keys=True) + "\n" for r in approved_rows), encoding="utf-8")
@@ -328,7 +366,7 @@ def freeze_pilot(directory, *, epochs=40, seeds=(17, 23, 41), model_width=32,
                                                "max_length": max_length, "batch_size": batch_size,
                                                "learning_rate": learning_rate},
                                      "primary_source_pointer_decoder_modes": list(pointer_decoder_modes),
-                                     "generation_max_new_tokens": 160, "human_validated": False,
+                                     "generation_max_new_tokens": generation_budget, "human_validated": False,
                                      "decoder_policy": "greedy byte-level UTF-8 constrained decoding; EOS only at complete codepoint boundaries",
                                      "quality_thresholds": {"valid_unicode_rate": 1.0,
                                                             "semantic_checker_coverage_rate": 1.0,
@@ -475,16 +513,13 @@ def _require_release_test_gate(base, protocol, manifest, rows):
             name: _hash_file(base / name) for name in config_names}:
         raise ValueError("release holdout remains sealed: registered config identity changed")
 
-    selected_primary_weights = protocol.get("primary_source_copy_weights")
-    if selected_primary_weights is not None:
-        selected_primary_weights = {float(weight) for weight in selected_primary_weights}
-    selected_primary_latent_weights = protocol.get("primary_latent_objective_weights")
-    if selected_primary_latent_weights is not None:
-        selected_primary_latent_weights = {float(weight) for weight in selected_primary_latent_weights}
-    selected_primary_balances = set(protocol.get("primary_transition_balance_modes", ["row_uniform"]))
+    registered = [(name, _read(base / name)) for name in config_names]
+    try:
+        selected_primary = {name for name, _ in _registered_primary_configs(protocol, registered)}
+    except ValueError as error:
+        raise ValueError(f"release holdout remains sealed: {error}") from error
     primary_configs = []
-    for name in config_names:
-        config = _read(base / name)
+    for name, config in registered:
         output = (base / config["output_dir"]).resolve()
         latest_path, best_path = output / "latest.pt", output / "best.pt"
         resolved_path = output / "resolved_run.json"
@@ -497,33 +532,8 @@ def _require_release_test_gate(base, protocol, manifest, rows):
                 or latest.get("run_sha256") != resolved.get("run_sha256")
                 or best.get("run_sha256") != resolved.get("run_sha256")):
             raise ValueError("release holdout remains sealed: a registered run is incomplete or has mixed checkpoints")
-        condition_weight = config.get("objective", {}).get("source_copy_weight", 0.0)
-        latent_weight = config.get("objective", {}).get("latent_objective_weight", 1.0)
-        transition_balance = config.get("training", {}).get("transition_balance", "row_uniform")
-        if (config.get("objective", {}).get("mode") == primary
-                and (selected_primary_weights is None or condition_weight in selected_primary_weights)
-                and (selected_primary_latent_weights is None or latent_weight in selected_primary_latent_weights)
-                and transition_balance in selected_primary_balances):
+        if name in selected_primary:
             primary_configs.append((name, config, output, resolved))
-    primary_weights = (selected_primary_weights if selected_primary_weights is not None else
-                       {cfg.get("objective", {}).get("source_copy_weight", 0.0)
-                        for _, cfg, _, _ in primary_configs})
-    if selected_primary_latent_weights is None:
-        expected_primary = {(seed, weight, balance) for seed in seeds for weight in primary_weights
-                            for balance in selected_primary_balances}
-        actual_primary = {(cfg.get("seed"), cfg.get("objective", {}).get("source_copy_weight", 0.0),
-                           cfg.get("training", {}).get("transition_balance", "row_uniform"))
-                          for _, cfg, _, _ in primary_configs}
-    else:
-        expected_primary = {(seed, weight, latent_weight, balance) for seed in seeds for weight in primary_weights
-                            for latent_weight in selected_primary_latent_weights
-                            for balance in selected_primary_balances}
-        actual_primary = {(cfg.get("seed"), cfg.get("objective", {}).get("source_copy_weight", 0.0),
-                           cfg.get("objective", {}).get("latent_objective_weight", 1.0),
-                           cfg.get("training", {}).get("transition_balance", "row_uniform"))
-                          for _, cfg, _, _ in primary_configs}
-    if len(primary_configs) != len(expected_primary) or actual_primary != expected_primary:
-        raise ValueError("release holdout remains sealed: primary runs do not cover every frozen seed/objective dose")
 
     expected_buckets = set()
     held_out = [row for row in rows if manifest.groups[row.split_group_id] == "validation"]
@@ -535,8 +545,7 @@ def _require_release_test_gate(base, protocol, manifest, rows):
             paths.setdefault((row.path_id, row.language), []).append(row)
     for (_, language), path_rows in paths.items():
         ordered = sorted(path_rows, key=lambda row: row.path_step)
-        actions = ordered[0].action.kind + ":" + ordered[0].action.value
-        actions += "+" + ordered[1].action.kind + ":" + ordered[1].action.value
+        actions = "+".join(f"{row.action.kind}:{row.action.value}" for row in ordered)
         expected_buckets.add(f"{language}/held_out_path/{actions}")
     if not expected_buckets:
         raise ValueError("release holdout remains sealed: frozen validation buckets are empty")
@@ -567,18 +576,25 @@ def _require_release_test_gate(base, protocol, manifest, rows):
                 or report.get("human_validated") is not False
                 or report.get("_evaluation_identity") != expected_identity
                 or set(checks) != expected_buckets
+                or set(report.get("scores", {})) != expected_buckets
+                or not all(check and all(value is True for value in check.values())
+                           for check in checks.values())
                 or report.get("quality_gate", {}).get("status") != "pass"):
             raise ValueError("release holdout remains sealed: every primary validation gate must pass on bound evidence")
         for bucket, score in report.get("scores", {}).items():
             task = bucket.split("/", 2)[1]
             prefix = "single_action" if task == "single" else "held_out_path"
             thresholds = protocol.get("quality_thresholds", {})
-            if (bucket not in expected_buckets
-                    or score.get("valid_unicode_rate", 0) < thresholds.get("valid_unicode_rate", 1.0)
-                    or score.get("action_fidelity_rate") is None
-                    or score["action_fidelity_rate"] < thresholds.get(f"{prefix}_action_fidelity_rate", 1.0)
-                    or score.get("preservation_rate") is None
-                    or score["preservation_rate"] < thresholds.get(f"{prefix}_preservation_rate", 1.0)):
+            required_rates = (
+                (score.get("valid_unicode_rate"), thresholds.get("valid_unicode_rate", 1.0)),
+                (score.get("checker_coverage_rate"), thresholds.get("semantic_checker_coverage_rate", 1.0)),
+                (score.get("action_fidelity_rate"), thresholds.get(f"{prefix}_action_fidelity_rate", 1.0)),
+                (score.get("preservation_rate"), thresholds.get(f"{prefix}_preservation_rate", 1.0)),
+            )
+            if (bucket not in expected_buckets or not score.get("examples", 0)
+                    or any(type(rate) not in {int, float} or not math.isfinite(rate)
+                           or not 0 <= rate <= 1 or rate < threshold
+                           for rate, threshold in required_rates)):
                 raise ValueError("release holdout remains sealed: recorded validation scores miss frozen thresholds")
 
 
@@ -798,6 +814,7 @@ def main():
     parser.add_argument("--model-width", type=int, default=32)
     parser.add_argument("--model-heads", type=int, default=4)
     parser.add_argument("--model-layers", type=int, default=1)
+    parser.add_argument("--max-length", type=int, default=192)
     parser.add_argument("--batch-size", type=int, default=80)
     parser.add_argument("--learning-rate", type=float, default=0.001)
     parser.add_argument("--primary-mode", choices=MODES, default="tide")
@@ -818,6 +835,7 @@ def main():
     if args.command == "freeze":
         result = freeze_pilot(args.directory, epochs=args.epochs, model_width=args.model_width,
                               model_heads=args.model_heads, model_layers=args.model_layers,
+                              max_length=args.max_length,
                               batch_size=args.batch_size, learning_rate=args.learning_rate,
                               primary_mode=args.primary_mode, source_copy_weight=args.source_copy_weight,
                               condition_modes=args.condition_modes,

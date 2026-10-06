@@ -8,7 +8,9 @@ This folder is an Obsidian-compatible, project-local knowledge vault. Open this 
 - [[wiki/RMIT Hackathon 2026]] — current official event-format facts, unresolved deliverables, and page inconsistencies.
 - [[wiki/Dataset Research — 2026-09-30]] — current corpus decision, PhoMT conditional permission, mandatory paper citation/release checklist, and intake status. The 2026-09-28 page is historical research context.
 - [[wiki/First Implementation Milestone]] — data-agnostic TIDE-JEPA prototype, independent review, and verification limits.
-- [[experiments/index]] — AI-reviewed synthetic Vi–En preliminary pilots; v4.19 completed training and validation, failed the quality gate, and retained its sealed holdout.
+- [[experiments/index]] — AI-reviewed synthetic Vi–En preliminary pilots; v4.20 completed training and validation, failed the quality gate, and retained its sealed holdout.
+- [v4.20 status](../../VI_EN_RESULTS_V4.20_STATUS.md) — six decoder-comparison runs complete; validation gate failed and release holdout remains sealed.
+- [v4.20 validation report](../../VI_EN_RESULTS_V4.20_VALIDATION.md) — aggregate-only validation outcomes by decoder, language, action, path, and seed.
 - [v4.19 status](../../VI_EN_RESULTS_V4.19_STATUS.md) — 12/12 runs and validation complete; 0/12 configurations passed, release holdout remains sealed.
 - [v4.19 validation report](../../VI_EN_RESULTS_V4.19_VALIDATION.md) — aggregate-only frozen gate, denominators, and per-seed bucket outcomes.
 - [v4.13 status](../../VI_EN_RESULTS_V4.13_STATUS.md) — fresh, independently Luna-reviewed dose-response; 12/12 runs completed, both primary TIDE gates failed and holdout remains sealed.
@@ -19,7 +21,7 @@ This folder is an Obsidian-compatible, project-local knowledge vault. Open this 
 - [v4.17 status](../../VI_EN_RESULTS_V4.17_STATUS.md) — 12 runs and validation complete; all 60 primary checks failed, holdout sealed. See [aggregate report](../../VI_EN_RESULTS_V4.17_VALIDATION.md).
 - [v4.15 status](../../VI_EN_RESULTS_V4.15_STATUS.md) — latest completed nine-run comparison; primary TIDE gate failed and holdout sealed.
 - [v4.14 status](../../VI_EN_RESULTS_V4.14_STATUS.md) — corrected 15,360-record context-diversity pilot; six runs and validation completed, frozen TIDE gate failed, holdout sealed.
-- [VI_EN_RESULTS.md](../../VI_EN_RESULTS.md) — current v4.18 validation failure and sealed release holdout; prior aggregate evaluations preserved.
+- [VI_EN_RESULTS.md](../../VI_EN_RESULTS.md) — current v4.20 validation failure and sealed release holdout; prior aggregate evaluations preserved.
 - [v4.10 status](../../VI_EN_RESULTS_V4.10_STATUS.md) — frozen private synthetic protocol with two independent Luna approvals; 12/12 training and validation complete, TIDE preservation gate failed and holdout remains sealed. See the [validation report](../../VI_EN_RESULTS_V4.10_VALIDATION.md). v4.9 was superseded before training.
 - v4.14 — six matched runs and validation-only evaluation complete; 4/30 primary seed-by-bucket checks passed, all four held-out paths; all 24 single-action checks failed. Token-only pooled preservation exceeded TIDE in all buckets. Holdout remains sealed. See [status](../../VI_EN_RESULTS_V4.14_STATUS.md) and the [aggregate report](../../VI_EN_RESULTS_V4.14_VALIDATION.md).
 - v4.13 — 12/12 dose-response runs and validation-only evaluation complete; only 10/60 seed-by-bucket checks passed, including one single-action bucket; 47/48 single-action buckets failed, and three path buckets failed. Direct test scoring was refused; holdout remains sealed. See [status](../../VI_EN_RESULTS_V4.13_STATUS.md) and the [aggregate report](../../VI_EN_RESULTS_V4.13_VALIDATION.md).

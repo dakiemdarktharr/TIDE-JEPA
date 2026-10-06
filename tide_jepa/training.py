@@ -141,7 +141,9 @@ def compute_loss(model, batch: Batch, inventory: Inventory, objective: Objective
     token_mask = batch.labels != model.cfg.pad_id
     token_weights = token_mask.to(logits.dtype) * edge_weights[:, None]
     token_count = token_weights.sum()
-    token = (per_token * token_weights).sum() / token_count.clamp_min(1.0)
+    # Batch validation guarantees at least one label and positive edge weights.
+    # A floor of one changes the mean for small, otherwise valid weights.
+    token = (per_token * token_weights).sum() / token_count
     copy_token = token.new_zeros(())
     copy_token_count = token.new_zeros(())
     if objective.source_copy_weight or objective.compute_source_copy_term:
