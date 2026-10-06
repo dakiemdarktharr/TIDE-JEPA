@@ -193,6 +193,7 @@ def freeze_pilot(directory, *, epochs=40, seeds=(17, 23, 41), model_width=32,
         "v4.20": "tide_jepa/pilot_seed.py:original-ai-authored-v4.20",
         "v4.21": "tide_jepa/pilot_seed.py:original-ai-authored-v4.21",
         "v4.22": "tide_jepa/pilot_seed.py:original-ai-authored-v4.22",
+        "v4.23": "tide_jepa/pilot_seed.py:original-ai-authored-v4.23",
     }.get(version)
     if expected_provenance is None or any(r.provenance_ref != expected_provenance
            or r.license_ref != "original-ai-authored-internal-research; no-PhoMT-content" for r in rows):
@@ -237,7 +238,7 @@ def freeze_pilot(directory, *, epochs=40, seeds=(17, 23, 41), model_width=32,
                   "v4.15": 20261015, "v4.16": 20261017,
                   "v4.17": 20261018, "v4.18": 20261019,
                   "v4.19": 20261020, "v4.20": 20261021, "v4.21": 20261022,
-                  "v4.22": 20261023}.get(version, 20261001)
+                  "v4.22": 20261023, "v4.23": 20261024}.get(version, 20261001)
     manifest = SplitManifest(dataset_fingerprint(approved_rows), split_seed, fractions, groups,
                              {name: tuple(sorted(r.record_id for r in rows if groups[r.split_group_id] == name))
                               for name in ("train", "validation", "test")})
@@ -346,9 +347,9 @@ def freeze_pilot(directory, *, epochs=40, seeds=(17, 23, 41), model_width=32,
                                      **({"release_holdout_scope": (
                                          "The release holdout uses the same ordered action paths as train and validation; "
                                          "it probes fresh held-out factor combinations only and does not add an action-order shift.")}
-                                        if version in ("v4.18", "v4.19", "v4.20", "v4.21", "v4.22") else {}),
+                                        if version in ("v4.18", "v4.19", "v4.20", "v4.21", "v4.22", "v4.23") else {}),
                                      **({"registered_hypotheses": statement["registered_hypotheses"]}
-                                        if version in ("v4.18", "v4.19", "v4.20", "v4.21", "v4.22") else {}),
+                                        if version in ("v4.18", "v4.19", "v4.20", "v4.21", "v4.22", "v4.23") else {}),
                                      **({"primary_latent_objective_weights": primary_latent_weights}
                                         if primary_latent_weights is not None else {}),
                                      **({"latent_objective_multiplier_scope": [
@@ -432,7 +433,7 @@ def _semantic_frame_flags(text, language, frame):
                              FAMILIES_V49, FAMILIES_V410, FAMILIES_V411, FAMILIES_V412,
                              FAMILIES_V413, FAMILIES_V414, FAMILIES_V415, FAMILIES_V416,
                              FAMILIES_V417, FAMILIES_V418, FAMILIES_V419, FAMILIES_V420,
-                             FAMILIES_V421, FAMILIES_V422)
+                             FAMILIES_V421, FAMILIES_V422, FAMILIES_V423)
     event = frame.get("event")
     definition = next((item for family_set in (FAMILIES_V4, FAMILIES_V42, FAMILIES_V43,
                                                FAMILIES_V44, FAMILIES_V45, FAMILIES_V46,
@@ -440,7 +441,7 @@ def _semantic_frame_flags(text, language, frame):
                                                FAMILIES_V411, FAMILIES_V412, FAMILIES_V413,
                                                FAMILIES_V414, FAMILIES_V415, FAMILIES_V416,
                                                FAMILIES_V417, FAMILIES_V418, FAMILIES_V419,
-                                               FAMILIES_V420, FAMILIES_V421, FAMILIES_V422)
+                                               FAMILIES_V420, FAMILIES_V421, FAMILIES_V422, FAMILIES_V423)
                        for group in family_set.values() for item in group if item[0] == event), None)
     if definition is None:
         return None
@@ -477,8 +478,10 @@ def _semantic_frame_flags(text, language, frame):
         agent, patient = agent_vi, patient_vi
         place = frame.get("place_vi")
         required_markers.append("hôm qua" if frame["time"] == "past" else "bây giờ")
+        progressive_now = (event.startswith("compose423_") and frame["time"] != "past"
+                           and frame["polarity"] == "positive")
         verb_phrase = ("không " + verb_vi) if frame["polarity"] == "negative" else (
-            ("đã " if frame["time"] == "past" else "") + verb_vi)
+            ("đã " if frame["time"] == "past" else "đang " if progressive_now else "") + verb_vi)
         agent_present = _norm_text(agent) in normalized
         patient_present = _norm_text(patient) in normalized
         predicate_present = _norm_text(verb_phrase) in normalized
@@ -492,6 +495,7 @@ def _semantic_frame_flags(text, language, frame):
         action = (all(_norm_text(marker) in normalized for marker in required_markers)
                   and _norm_text(other_time) not in normalized
                   and negative == (frame["polarity"] == "negative")
+                  and (not progressive_now or "đang" in normalized.split())
                   and (frame["time"] != "past" or frame["polarity"] == "negative" or past_positive))
     else:
         return None

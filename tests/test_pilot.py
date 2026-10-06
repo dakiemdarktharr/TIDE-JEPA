@@ -14,7 +14,7 @@ from tide_jepa.phomt_intake import TRAIN_MEMBERS, _select_pairs
 from tide_jepa.data import dataset_fingerprint, read_jsonl
 from tide_jepa.pilot_seed import (FAMILIES_V43, FAMILIES_V44, FAMILIES_V45,
                                   FAMILIES_V46, FAMILIES_V47, FAMILIES_V48,
-                                  FAMILIES_V49, FAMILIES_V410, FAMILIES_V411, FAMILIES_V412, FAMILIES_V413, FAMILIES_V414, FAMILIES_V415, FAMILIES_V416, FAMILIES_V417, FAMILIES_V418, FAMILIES_V419, FAMILIES_V420, FAMILIES_V421, FAMILIES_V422, author_seed,
+                                  FAMILIES_V49, FAMILIES_V410, FAMILIES_V411, FAMILIES_V412, FAMILIES_V413, FAMILIES_V414, FAMILIES_V415, FAMILIES_V416, FAMILIES_V417, FAMILIES_V418, FAMILIES_V419, FAMILIES_V420, FAMILIES_V421, FAMILIES_V422, FAMILIES_V423, author_seed,
                                   author_seed_v4)
 from tide_jepa.schema import Action, Inventory
 
@@ -943,6 +943,41 @@ class SeedAuthoringTests(unittest.TestCase):
             self.assertTrue(all(_semantic_frame_flags(row.target_text, row.language,
                                                        frames[row.target_frame_id]) is not None
                                 for row in rows))
+
+    def test_v423_balances_factors_and_aligns_progressive_translation(self):
+        from collections import Counter
+        splits = [FAMILIES_V423[name] for name in ("train", "validation", "test")]
+        triples = [tuple(map(int, row[0].removeprefix("compose423_").split("_")))
+                   for split in splits for row in split]
+        self.assertEqual([len(split) for split in splits], [112, 40, 40])
+        self.assertEqual(len(set(triples)), 192)
+        self.assertTrue(any(row[0].startswith("compose423_") and row[2] == "search for"
+                            and row[7] == "tìm kiếm"
+                            for split in splits for row in split))
+        for split in splits:
+            rows = [tuple(map(int, row[0].removeprefix("compose423_").split("_"))) for row in split]
+            self.assertEqual(set(row[0] for row in rows), {50, 51, 52})
+            for dimension in range(3):
+                counts = Counter(row[dimension] for row in rows)
+                self.assertLessEqual(max(counts.values()) - min(counts.values()), 1)
+        with tempfile.TemporaryDirectory() as temporary:
+            destination = Path(temporary) / "v4.23"
+            statement = author_seed_v4(destination, version="v4.23")
+            self.assertEqual(statement["records"], 15360)
+            self.assertIn("Vietnamese đang", statement["split_policy"])
+            self.assertIn("path-enriched", statement["transition_weighting_note"])
+            inventory_value = json.loads((destination / "inventory.draft.json").read_text(encoding="utf-8"))
+            inventory = Inventory(tuple(Action(**value) for value in inventory_value["actions"]), {
+                language: frozenset(Action(**value) for value in inventory_value["proposed_by_language"][language])
+                for language in ("en", "vi")})
+            rows = read_jsonl(destination / "corpus.draft.jsonl", inventory,
+                              languages=("en", "vi"), require_approved=False)
+            frames = json.loads((destination / "semantic_frames.draft.json").read_text(encoding="utf-8"))
+            from tide_jepa.pilot import _semantic_frame_flags
+            self.assertTrue(all((lambda flags: flags is not None and flags["action_fidelity"]
+                                 and flags["preservation"])(
+                _semantic_frame_flags(row.target_text, row.language, frames[row.target_frame_id]))
+                for row in rows))
 
     def test_unique_transition_weighting_rejects_unequal_representation_counts(self):
         from types import SimpleNamespace

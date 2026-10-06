@@ -1,6 +1,6 @@
 # TIDE-JEPA
 
-Status snapshot, **2026-10-07**: v4.20 failed its quality gate and v4.21 completed training/validation but produced an invalid semantic report because the frozen evaluator omitted its family registry. The gate failed closed and v4.21 release holdout remains sealed. The omission now has regression coverage; v4.22 is being prepared with fresh corpus, independent AI review, protocol, and holdout. See [v4.21 status](VI_EN_RESULTS_V4.21_STATUS.md) and [current results](VI_EN_RESULTS.md).
+Status snapshot, **2026-10-07**: v4.20 failed its quality gate and v4.21 completed training/validation but produced an invalid semantic report because the frozen evaluator omitted its family registry. The gate failed closed and v4.21 release holdout remains sealed. The omission now has regression coverage. v4.22 was held before freeze after independent review raised split-balance and progressive-aspect concerns; v4.23 addresses those issues and awaits new review. See [v4.21 status](VI_EN_RESULTS_V4.21_STATUS.md), [v4.22 review status](VI_EN_RESULTS_V4.22_STATUS.md), and [current results](VI_EN_RESULTS.md).
 
 From-scratch research prototype for action-conditioned latent transitions and controlled generation. The current preliminary pilot covers **Vietnamese and English**; **Phan Rang Cham** is a planned language whose training/evaluation remains deferred pending permission and language review.
 
@@ -105,7 +105,7 @@ The checkpoint rule is frozen before training; v4.21 used the final epoch rather
 
 ### What the evidence currently supports
 
-The software supports reproducible experiments and diagnostic inference. It has not demonstrated a usable linguistic model or a TIDE advantage: v4.20 passed **0/60** frozen validation bucket gates, with preservation below 1% for both decoders, despite 100% Unicode validity and EOS termination. v4.21 has an invalid evaluator-coverage report; v4.22 is in preparation. Its corpus and reviews are AI-authored/AI-reviewed, preliminary, and `human_validated=false`. PhoMT training has not occurred, and Cham training/evaluation remains deferred. The [repair report](audits/2026-10-06/TROUBLESHOOTING.md) records the prior 109-test Linux CPU audit; the current suite passes 111 tests with zero skips; those tests verify software behavior, not linguistic quality.
+The software supports reproducible experiments and diagnostic inference. It has not demonstrated a usable linguistic model or a TIDE advantage: v4.20 passed **0/60** frozen validation bucket gates, with preservation below 1% for both decoders, despite 100% Unicode validity and EOS termination. v4.21 has an invalid evaluator-coverage report; v4.22 is held before freeze; v4.23 addresses its review concerns. Its corpus and reviews are AI-authored/AI-reviewed, preliminary, and `human_validated=false`. PhoMT training has not occurred, and Cham training/evaluation remains deferred. The [repair report](audits/2026-10-06/TROUBLESHOOTING.md) records the prior 109-test Linux CPU audit; the current suite passes 111 tests with zero skips; those tests verify software behavior, not linguistic quality.
 
 ## Current implementation: action-path composition
 
