@@ -1,14 +1,111 @@
 # TIDE-JEPA
 
-Current completed evidence is v4.20, whose validation gate failed and release holdout remains sealed. v4.21 is now separately reviewed and frozen for a new 2×2 source-copy × decoder study; training has not started. See [v4.21 preregistered status](VI_EN_RESULTS_V4.21_STATUS.md).
+Status snapshot, **2026-10-06**: the latest completed quality evidence is v4.20, whose validation gate failed; its release holdout remains sealed. v4.21 is separately reviewed and frozen for a new 2×2 source-copy-loss × decoder study across three seeds. Training is underway: 4/12 runs have all 29 training-epoch rows and both checkpoints, and 8/12 have started writing metrics. These are progress counts, not a completed checkpoint-identity audit or quality result. The [v4.21 preregistered status](VI_EN_RESULTS_V4.21_STATUS.md) records the original freeze; [current results](VI_EN_RESULTS.md) describe completed evidence.
 
-From-scratch research prototype for action-conditioned latent transitions and controlled generation in **Vietnamese, English, and Phan Rang Cham**.
+From-scratch research prototype for action-conditioned latent transitions and controlled generation. The current preliminary pilot covers **Vietnamese and English**; **Phan Rang Cham** is a planned language whose training/evaluation remains deferred pending permission and language review.
 
 Read [the current specification](tide_jepa_spec.md) first. The [project decision ledger](Obsidian/RMIT%20Hackathon/wiki/Project%20Ground%20Truth.md) records user authority. Earlier MATE-JEPA/La Ha proposals are superseded drafts.
 
 Current data-source findings and the PhoMT permission record are in [Dataset Research — 2026-09-30](Obsidian/RMIT%20Hackathon/wiki/Dataset%20Research%20%E2%80%94%202026-09-30.md). PhoMT is conditionally approved for the requested research/education scope; its local archive now passes the supplied SHA-256 and metadata audit. It has not been used for model training.
 
 The user-authorized **preliminary AI-reviewed English–Vietnamese synthetic pilot** has a reproducible training/evaluation workflow and an offline diagnostic demo. v4.20 completed six fixed-final-epoch CPU configurations and validation-only generation. Unicode and EOS were 100%, but action fidelity and preservation missed all 60 frozen seed-by-bucket checks; the source-pointer decoder did not improve the primary metrics. Its release holdout remains sealed. See the [v4.20 status](VI_EN_RESULTS_V4.20_STATUS.md) and [aggregate validation report](VI_EN_RESULTS_V4.20_VALIDATION.md). Earlier v4.19 and prior versions also failed their frozen quality gates; their negative results and sealed holdouts remain preserved in [current results](VI_EN_RESULTS.md), [historical pilot summary](VI_EN_RESULTS_HISTORY.md), and the [pilot workflow](VI_EN_PILOT.md). The validation run was bound to source commit `19ab07c`. Workspace repairs intentionally change the implementation identity; use the hash-verified `scripts/run_frozen.py` launcher for that pilot’s original inference or cached validation replay. Committing changed source does not restore a frozen identity; new experiments need a fresh reviewed protocol. The pilot remains original AI-authored synthetic text, not PhoMT and not human-validated. Phan Rang Cham is deferred pending separate dataset-use permission and language review. Agent creation follows [the user's Luna-only requirement](AGENTS.md).
+
+## How the model works
+
+TIDE-JEPA learns to edit a sentence according to explicit semantic actions while preserving the rest of its meaning. A request supplies the source sentence, its language, and an ordered list of approved actions such as `TIME:PAST` and `POLARITY:NEGATIVE`. The offline adapter currently requires source and target languages to match. Cross-language alignment is a training objective; it does not expose a translation feature.
+
+For illustration only, an original example is `Lan buys a book.` with actions `TIME:PAST` then `POLARITY:NEGATIVE`. The intended result is `Lan did not buy a book.`: tense and polarity change, while the person, predicate, and object remain. This is an explanation of the task, **not an observed model output or a corpus row**.
+
+1. **Encode the source.** A fixed UTF-8 byte tokenizer uses 256 byte IDs plus PAD/BOS/EOS, for 259 tokens. The online encoder adds token and position embeddings, applies attention blocks, and mean-pools nonpadding positions into a sentence vector `z`. It also retains the per-token vectors as source memory for the decoder.
+2. **Predict the edited meaning.** Learned action and language embeddings condition a residual transition network: `z_next = z + transition(concat(z, action_embedding, language_embedding))`. For a path, each action consumes the previous predicted vector in the supplied order. The system decodes the final vector; it does not generate and re-encode an intermediate sentence for every action.
+3. **Learn a target representation during training.** A separate target encoder reads the annotated target sentence without gradients. Its weights follow the online encoder through an exponential moving average (EMA). A JEPA loss brings the predicted vector toward this teacher vector. The teacher supplies a slowly changing training target and is not used to read a reference sentence at inference.
+4. **Generate the edited sentence.** A causal decoder conditions on the final predicted vector and language embedding, attends to source memory, and predicts the next byte token. Training uses the annotated prefix (teacher forcing); inference feeds back its own greedy predictions. An optional source-pointer decoder mixes the vocabulary distribution with a distribution over byte tokens in the input, using a learned gate. Copying bytes does not itself guarantee preservation of words or meaning.
+5. **Align changes across languages.** For explicitly approved corresponding Vietnamese/English edges, TIDE compares `predicted_state - source_state` across languages. It applies the same principle to paired complete action paths. This encourages a shared representation of the *change* rather than requiring identical sentence forms. Alignment pairs must be declared; neither batch position nor a translation link creates an action label.
+
+The main components are in [model.py](tide_jepa/model.py), the losses and optimizer step in [training.py](tide_jepa/training.py), and request validation and generation in [infer.py](tide_jepa/infer.py).
+
+### Model workflow
+
+Solid arrows show the source-to-output computation and training-loss inputs. Dotted arrows show training-only teacher and cross-language supervision. The teacher branch and losses are absent during inference.
+
+```mermaid
+flowchart TD
+    S["Source sentence"] --> B["UTF-8 byte tokenizer"]
+    B --> E["Online attention encoder"]
+    E --> Z["Mean-pooled source state z"]
+    E --> M["Per-token source memory"]
+    A["Ordered approved actions + language"] --> P["Residual transition rollout"]
+    Z --> P
+    P --> H["Final predicted state"]
+    H --> D["Causal decoder + source cross-attention"]
+    M --> D
+    B --> C["Optional source-byte pointer"]
+    M --> C
+    D --> V["Vocabulary distribution"]
+    D --> C
+    V --> G["Vocabulary output or gated pointer mixture"]
+    C --> G
+    G --> O["Greedy UTF-8-constrained decoding to EOS"]
+    O --> R["Edited sentence in the same language"]
+    T["Annotated target sentence: training only"] -.-> TE["EMA target encoder: no gradients"]
+    E -. "EMA weight update after optimizer step" .-> TE
+    TE -.-> J["JEPA latent loss"]
+    H -.-> J
+    T -.-> F["Shifted target prefix: teacher forcing"]
+    F -.-> D
+    G --> L["Token and optional source-copy losses"]
+    T -.-> L
+    H -.-> X["TIDE delta alignment loss"]
+    Z -.-> X
+    PA["Explicit paired edges or paths in the other language"] -.-> X
+    J -.-> U["Weighted loss + variance penalty; AdamW update"]
+    X -.-> U
+    L -.-> U
+```
+
+### What is optimized
+
+All objective modes share the action-conditioned generator and single-action/path text supervision. They differ in which auxiliary losses are enabled:
+
+| Mode | Additional learning signal |
+|---|---|
+| `token_only` | No JEPA, latent alignment, or variance penalty; optional source-copy loss still follows the config. |
+| `generic_jepa` | Predict the teacher's target vector for single actions and composed paths; penalize low latent variance. |
+| `static_alignment` | JEPA terms plus alignment of paired predicted final states across languages. |
+| `tide` | JEPA terms plus alignment of paired transition deltas across languages, for edges and paths. |
+
+The weighted total combines next-token cross-entropy, composed-path token loss, optional source-copy token loss, JEPA edge/path losses, cross-language edge/path alignment, and a variance penalty intended to discourage collapsed source representations. Disabled terms contribute zero. The source-copy loss adds weight to annotated aligned target-byte positions; it is separate from the optional pointer decoder. AdamW updates trainable parameters with gradient clipping; the teacher then receives its EMA update. The auxiliary-loss multiplier and individual weights are configurable, so a TIDE-labelled config with a zero auxiliary multiplier contributes no latent-loss gradient.
+
+The v4.21 study crosses source-copy weights **0 / 1.5** with **vocabulary / source-pointer** decoders across seeds **17 / 23 / 41**. It uses width 32, four heads, one layer, a 192-token limit, and 29 fixed epochs. Decoder compute differs between cells, so this is not a matched-FLOP comparison. See the [frozen protocol summary](VI_EN_RESULTS_V4.21_STATUS.md).
+
+### Experiment workflow
+
+```mermaid
+flowchart TD
+    A["Authorized source and annotation scope"] --> B["Create preliminary Vi-En synthetic draft"]
+    B --> C["Independent AI reviews and adjudication"]
+    C --> D["Approved records and explicit action/alignment inventory"]
+    D --> E["Split whole event groups: train / validation / holdout"]
+    E --> F["Freeze hashes, configs, runtime, checkpoint rule and quality gates"]
+    F --> G["Verify identity and train registered configurations"]
+    G --> H["Atomic checkpoints and aggregate training logs"]
+    H --> I["Verify completion and checkpoint identities"]
+    I --> J["Generate and score validation only"]
+    J --> K{"Every frozen primary gate passes?"}
+    K -- "No" --> N["Report failed or invalid evidence; keep holdout sealed"]
+    N --> P["New hypothesis and fresh reviewed protocol"]
+    P --> B
+    K -- "Yes" --> T["Authorized release-holdout evaluation under the frozen protocol"]
+    T --> R["Report aggregate results and limitations"]
+    H --> Q["Hash-verified frozen snapshot for diagnostic offline inference"]
+    Q --> W["CLI or local HTTP demo; diagnostic outputs"]
+```
+
+The checkpoint rule is frozen before training; v4.21 uses the final epoch rather than validation-based checkpoint selection. Validation loss monitoring during training is separate from generated-text validation scoring. Checkpoint provenance failures stop replay; quality failures stop release-holdout scoring. Diagnostic inference does not bypass these gates or constitute a quality approval. Corpus rows, reviews, checkpoints, and generated text stay in ignored `data/` and `runs/`; GitHub receives code, documentation, and aggregate evidence.
+
+### What the evidence currently supports
+
+The software supports reproducible experiments and diagnostic inference. It has not demonstrated a usable linguistic model or a TIDE advantage: v4.20 passed **0/60** frozen validation bucket gates, with preservation below 1% for both decoders, despite 100% Unicode validity and EOS termination. v4.21 is still training. Its corpus and reviews are AI-authored/AI-reviewed, preliminary, and `human_validated=false`. PhoMT training has not occurred, and Cham training/evaluation remains deferred. The [repair report](audits/2026-10-06/TROUBLESHOOTING.md) records 109 passing Linux CPU tests with zero skips; those tests verify software behavior, not linguistic quality.
 
 ## Current implementation: action-path composition
 
@@ -106,7 +203,7 @@ The full-batch/experiment runner, checkpointing, deterministic grouped batching,
 
 `python -m tide_jepa.experiment path\to\run.json` runs a configured experiment on a corpus that has already passed source-rights and language-review checks. It refuses records without `approval_status: "approved"`; it does not fetch or approve data. Batches keep every `split_group_id` intact, so aligned translations and multi-edge paths cannot be divided between optimizer steps. The runner writes the split manifest, resolved config and hashes, per-epoch train/validation metrics, and atomic `latest.pt` / `best.pt` checkpoints. It logs examples, UTF-8 byte-token counts, updates, wall time, throughput, and peak allocated VRAM. `--resume` continues only when the config, corpus, split, action inventory, and alignment hashes match.
 
-The held-out test split is reserved and fingerprinted but is not evaluated during training or checkpoint selection. After the protocol and checkpoint-selection rule are frozen, evaluate it once with `python -m tide_jepa.experiment run.json --resume --evaluate-test`; this loads `best.pt` selected on validation and writes `test_metrics.json`. Do not use the test result to change the model or protocol. FLOPs are not estimated; wall time, updates, token counts, examples, throughput, and peak allocated VRAM are recorded. Cross-language losses are enabled only by an optional explicit alignment JSON whose pairs refer to records/paths in the same semantic split group. A blank or missing alignment file never implies a cross-language pair.
+The held-out test split is reserved and fingerprinted but is not evaluated during training or checkpoint selection. Frozen pilots must use `python -m tide_jepa.pilot evaluate <pilot-directory> --evaluation-split validation` first; release-holdout evaluation is refused unless every registered primary validation gate passes. The lower-level experiment runner also exposes `--resume --evaluate-test`, which loads `best.pt` under the configured checkpoint rule and writes `test_metrics.json`; it is not a substitute for the pilot's suite-level quality guard. Do not use test results to change the model or protocol. FLOPs are not estimated; wall time, updates, token counts, examples, throughput, and peak allocated VRAM are recorded. Cross-language losses are enabled only by an optional explicit alignment JSON whose pairs refer to records/paths in the same semantic split group. A blank or missing alignment file never implies a cross-language pair.
 
 An experiment config points to a corpus JSONL, an inventory JSON, and an output directory. The inventory format is:
 
@@ -140,4 +237,4 @@ Use `"alignments": "alignments.json"` to enable separately reviewed pairs. Its `
 
 For offline inference with a trained checkpoint, run `python -m tide_jepa.infer run.json runs/tide-seed-1/best.pt`. Send one JSON request per line on stdin, for example `{"request_id":"demo-1","source":"Lan mua một quyển sách.","source_language":"vi","target_language":"vi","actions":[{"kind":"TIME","value":"PAST"},{"kind":"POLARITY","value":"NEGATIVE"}],"max_new_tokens":96}`. Responses are JSONL and include generated text, token IDs, and a UTF-8 validity flag. The adapter checks the language's approved action inventory and supports single actions or ordered action paths. Its responses are diagnostic preliminary outputs; they do not establish linguistic correctness or human validation.
 
-This runner makes training executable, not scientifically validated. v4.2 failed its generation quality gate; v4.7 also failed validation; v4.8 training is currently incomplete and has not been evaluated. None provides natural-corpus or human linguistic evidence. PhoMT-derived action annotations and the human-validated benchmark remain unfinished.
+This runner makes training executable, not scientifically validated. The latest completed pilot, v4.20, failed its generation quality gate; v4.21 is training and has no completed generation-quality result. Earlier failed or invalidated experiments remain in the result history, and v4.8 remains incomplete. None provides natural-corpus or human linguistic evidence. PhoMT-derived action annotations and the human-validated benchmark remain unfinished.
