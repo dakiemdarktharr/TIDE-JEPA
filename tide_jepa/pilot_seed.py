@@ -253,6 +253,7 @@ _V417_AGENTS = (("Hai Yen", "Hải Yến"), ("Tuan Kiet", "Tuấn Kiệt"), ("Nh
 _V418_AGENTS = (("Minh Tam", "Minh Tâm"), ("Bao Chau", "Bảo Châu"), ("Le Anh", "Lê Anh"))
 _V419_AGENTS = (("Thanh Ha", "Thanh Hà"), ("Dinh Bao", "Đình Bảo"), ("Hoang Linh", "Hoàng Linh"))
 _V420_AGENTS = (("Tuyet Mai", "Tuyết Mai"), ("Nhat Khang", "Nhật Khang"), ("Viet Anh", "Việt Anh"))
+_V421_AGENTS = (("Hoai An", "Hoài An"), ("Bao Long", "Bảo Long"), ("Minh Quan", "Minh Quân"))
 
 
 def _compose_v44_families():
@@ -1038,6 +1039,53 @@ def _compose_v420_families():
 FAMILIES_V420 = _compose_v420_families()
 
 
+def _compose_v421_families():
+    """Make a fresh, pairwise-covered split for the copy × decoder study."""
+    import random
+
+    agents = (_V44_AGENTS + _V49_AGENTS + _V410_AGENTS + _V411_AGENTS + _V412_AGENTS
+              + _V413_AGENTS + _V414_AGENTS + _V415_AGENTS + _V416_AGENTS + _V417_AGENTS
+              + _V418_AGENTS + _V419_AGENTS + _V420_AGENTS + _V421_AGENTS)
+    remaining = [(agent, verb, patient)
+                 for agent in range(44, 47) for verb in range(8) for patient in range(8)]
+    train = []
+    pair_sets = (set(), set(), set())
+    while len(train) < 112:
+        best = max(
+            remaining,
+            key=lambda triple: (
+                sum(pair not in known for pair, known in zip(
+                    ((triple[0], triple[1]), (triple[0], triple[2]), (triple[1], triple[2])),
+                    pair_sets)),
+                tuple(-value for value in triple)),
+        )
+        train.append(best)
+        remaining.remove(best)
+        for pair, known in zip(((best[0], best[1]), (best[0], best[2]),
+                                (best[1], best[2])), pair_sets):
+            known.add(pair)
+    if any(not all(pair in known for pair, known in zip(
+            ((triple[0], triple[1]), (triple[0], triple[2]), (triple[1], triple[2])), pair_sets))
+           for triple in remaining):
+        raise ValueError("v4.21 held-out triples must reuse only training-seen factor pairs")
+    random.Random(20261022).shuffle(remaining)
+    validation, test = remaining[:40], remaining[40:80]
+
+    result = {"train": [], "validation": [], "test": []}
+    for split, combinations in (("train", train), ("validation", validation), ("test", test)):
+        for agent, verb, patient in combinations:
+            agent_en, agent_vi = agents[agent]
+            base, present, past, verb_vi = _V44_VERBS[verb]
+            patient_en, patient_vi = _V44_PATIENTS[patient]
+            event = f"compose421_{agent}_{verb}_{patient}"
+            result[split].append((event, agent_en, base, present, past,
+                                  patient_en, agent_vi, verb_vi, patient_vi))
+    return result
+
+
+FAMILIES_V421 = _compose_v421_families()
+
+
 def author_seed_v4(output_dir, *, version="v4"):
     """Create a new AI-authored v4-family draft with explicit bilingual frames."""
     output = Path(output_dir)
@@ -1055,6 +1103,7 @@ def author_seed_v4(output_dir, *, version="v4"):
                   FAMILIES_V44 if version == "v4.4" else
                   FAMILIES_V45 if version == "v4.5" else
                   FAMILIES_V414 if version == "v4.14" else
+                  FAMILIES_V421 if version == "v4.21" else
                   FAMILIES_V420 if version == "v4.20" else
                   FAMILIES_V419 if version == "v4.19" else
                   FAMILIES_V418 if version == "v4.18" else
@@ -1084,19 +1133,19 @@ def author_seed_v4(output_dir, *, version="v4"):
                          "predicate_en_present": en_present, "predicate_en_past": en_past,
                          "patient_en": en_patient, "patient_vi": vi_patient,
                          "context": "same event; requested action changes time or polarity only"}
-                if version in ("v4.14", "v4.15", "v4.16", "v4.17", "v4.18", "v4.19", "v4.20"):
+                if version in ("v4.14", "v4.15", "v4.16", "v4.17", "v4.18", "v4.19", "v4.20", "v4.21"):
                     frame.update({"place_en": "in the workshop", "place_vi": "trong xưởng",
                                   "context": "same event in the same workshop; only time or polarity changes"})
-                if version in ("v4.6", "v4.7", "v4.8", "v4.9", "v4.10", "v4.11", "v4.12", "v4.13", "v4.14", "v4.15", "v4.16", "v4.17", "v4.18", "v4.19", "v4.20"):
+                if version in ("v4.6", "v4.7", "v4.8", "v4.9", "v4.10", "v4.11", "v4.12", "v4.13", "v4.14", "v4.15", "v4.16", "v4.17", "v4.18", "v4.19", "v4.20", "v4.21"):
                     frame["predicate_en_progressive"] = _V46_PROGRESSIVE[en_base]
                 frames[f"{group}-state-{index}"] = frame
             path_edges = ([(0, 2, "TIME", "PAST"), (2, 3, "POLARITY", "NEGATIVE")]
                           if split == "test" and version == "v4.17" else
                           [(0, 1, "POLARITY", "NEGATIVE"), (1, 3, "TIME", "PAST")])
             for language in ("en", "vi"):
-                for variant in range(4 if version in ("v4.14", "v4.15", "v4.16", "v4.17", "v4.18", "v4.19", "v4.20") else 2):
+                for variant in range(4 if version in ("v4.14", "v4.15", "v4.16", "v4.17", "v4.18", "v4.19", "v4.20", "v4.21") else 2):
                     state_forms_v4_6 = None
-                    if version in ("v4.6", "v4.7", "v4.8", "v4.9", "v4.10", "v4.11", "v4.12", "v4.13", "v4.14", "v4.15", "v4.16", "v4.17", "v4.18", "v4.19", "v4.20"):
+                    if version in ("v4.6", "v4.7", "v4.8", "v4.9", "v4.10", "v4.11", "v4.12", "v4.13", "v4.14", "v4.15", "v4.16", "v4.17", "v4.18", "v4.19", "v4.20", "v4.21"):
                         progressive = _V46_PROGRESSIVE[en_base]
                         state_forms_v4_6 = {
                             "en": ((f"Right now, {en_agent} is {progressive} {en_patient}.",
@@ -1108,7 +1157,7 @@ def author_seed_v4(output_dir, *, version="v4"):
                                    (f"Bây giờ, {vi_agent} không {vi_verb} {vi_patient}.",
                                     f"{vi_agent} không {vi_verb} {vi_patient} bây giờ.")),
                         }
-                        if version in ("v4.14", "v4.15", "v4.16", "v4.17", "v4.18", "v4.19", "v4.20"):
+                        if version in ("v4.14", "v4.15", "v4.16", "v4.17", "v4.18", "v4.19", "v4.20", "v4.21"):
                             state_forms_v4_6 = {
                                 "en": ((f"In the workshop, {en_agent} is {progressive} {en_patient} right now.",
                                         f"Right now, {en_agent} is {progressive} {en_patient} in the workshop.",
@@ -1142,7 +1191,7 @@ def author_seed_v4(output_dir, *, version="v4"):
                                         f"Hôm qua, {vi_agent} không {vi_verb} {vi_patient} trong xưởng.",
                                         f"{vi_agent} không {vi_verb} {vi_patient} hôm qua, trong xưởng.",
                                         f"{vi_agent} không {vi_verb} {vi_patient} trong xưởng hôm qua."))}
-                    if version in ("v4.14", "v4.15", "v4.16", "v4.17", "v4.18", "v4.19", "v4.20"):
+                    if version in ("v4.14", "v4.15", "v4.16", "v4.17", "v4.18", "v4.19", "v4.20", "v4.21"):
                         realized = [state_forms_v4_6[language][state_index][variant]
                                     for state_index in range(4)]
                     else:
@@ -1155,7 +1204,7 @@ def author_seed_v4(output_dir, *, version="v4"):
                                       "vi": (f"Hôm qua, {vi_agent} đã {vi_verb} {vi_patient}.", f"{vi_agent} đã {vi_verb} {vi_patient} hôm qua.")},
                                      {"en": (f"Yesterday, {en_agent} did not {en_base} {en_patient}.", f"{en_agent} did not {en_base} {en_patient} yesterday."),
                                       "vi": (f"Hôm qua, {vi_agent} không {vi_verb} {vi_patient}.", f"{vi_agent} không {vi_verb} {vi_patient} hôm qua.")}]]
-                    if state_forms_v4_6 is not None and version not in ("v4.14", "v4.15", "v4.16", "v4.17", "v4.18", "v4.19", "v4.20"):
+                    if state_forms_v4_6 is not None and version not in ("v4.14", "v4.15", "v4.16", "v4.17", "v4.18", "v4.19", "v4.20", "v4.21"):
                         realized[0] = state_forms_v4_6[language][0][variant]
                         realized[1] = state_forms_v4_6[language][1][variant]
                     for edge_index, (source, target, kind, value) in enumerate(single_edges + path_edges):
@@ -1226,8 +1275,10 @@ def author_seed_v4(output_dir, *, version="v4"):
                                                  if version == "v4.19" else
                                                  "112 train, 40 validation, 40 release-holdout combinations from three fresh agent factors; every held-out factor pair is represented in training; English NOW uses present progressive; four context-balanced surface realizations per meaning state; action order matches across all splits; fresh split for a TIDE vocabulary-softmax versus source-pointer decoder comparison with fixed-final-epoch evaluation"
                                                  if version == "v4.20" else
+                                                 "112 train, 40 validation, 40 release-holdout combinations from three fresh agent factors; every held-out factor pair is represented in training; English NOW uses present progressive; four context-balanced surface realizations per meaning state; action order matches across all splits; fresh split for a fixed-final-epoch 2x2 TIDE source-copy-weight (0/1.5) × decoder (vocabulary/source-pointer) factorial"
+                                                 if version == "v4.21" else
                                                  "12 train, 4 validation, 4 release-holdout event families, fixed before model selection; new events not used in v3"),
-                                "surface_realizations_per_state": 4 if version in ("v4.14", "v4.15", "v4.16", "v4.17", "v4.18", "v4.19", "v4.20") else 2,
+                                "surface_realizations_per_state": 4 if version in ("v4.14", "v4.15", "v4.16", "v4.17", "v4.18", "v4.19", "v4.20", "v4.21") else 2,
                                 **({"transition_weighting_note": (
                                     "There are 3072 duplicated path-step rows across the full split: 1792 in "
                                     "training, 640 in validation, and 640 in the sealed release holdout. Each "
@@ -1262,7 +1313,12 @@ def author_seed_v4(output_dir, *, version="v4"):
                                     "primary_quality_gate": "Every decoder condition, seed, and language/action bucket must pass the frozen Unicode, action-fidelity, and preservation thresholds before the release holdout can be opened.",
                                     "compute_interpretation": "Decoder variants differ in parameter count and per-token operations; record updates, tokens, wall time, and throughput, and make no matched-FLOP claim.",
                                     "interpretation": "Report decoder contrasts descriptively across three seeds; synthetic references and three seeds do not establish natural-language efficacy or population-level statistical certainty."}}
-                                    if version == "v4.20" else {}),
+                                    if version == "v4.20" else
+                                    {"registered_hypotheses": {
+                                     "copy_decoder_interaction": "The combination of positive source-copy supervision (1.5) and a source-pointer decoder is hypothesized to improve joint source-slot preservation and action fidelity over either component alone; effects are descriptive across three seeds.",
+                                     "primary_quality_gate": "Every registered cell, seed, and language/action bucket must pass the frozen Unicode, action-fidelity, and preservation thresholds before the release holdout can be opened.",
+                                     "compute_interpretation": "The 2x2 copy-weight × decoder factorial computes the source-copy term in every cell; only its multiplier and decoder mode vary. Decoder variants differ in parameter count and operations, so no matched-FLOP claim is made.",
+                                     "interpretation": "Report all four cells separately and describe the interaction without population-level claims; the benchmark is synthetic and has three seeds."}} if version == "v4.21" else {}),
                                 "limitations": ["AI-authored; independent AI review is preliminary", "synthetic shared grammar; no domain-generalization claim",
                                                 "single deterministic reference per realization", "no human evaluation or natural-corpus efficacy"]},
         "semantic_frames.draft.json": frames,
@@ -1275,7 +1331,7 @@ def author_seed_v4(output_dir, *, version="v4"):
 def main():
     parser = argparse.ArgumentParser(description="Author a pending original synthetic Vi–En pilot for review")
     parser.add_argument("output_dir")
-    parser.add_argument("--pilot-version", choices=("v3", "v4", "v4.1", "v4.2", "v4.3", "v4.4", "v4.5", "v4.6", "v4.7", "v4.8", "v4.9", "v4.10", "v4.11", "v4.12", "v4.13", "v4.14", "v4.15", "v4.16", "v4.17", "v4.18", "v4.19", "v4.20"), default="v3")
+    parser.add_argument("--pilot-version", choices=("v3", "v4", "v4.1", "v4.2", "v4.3", "v4.4", "v4.5", "v4.6", "v4.7", "v4.8", "v4.9", "v4.10", "v4.11", "v4.12", "v4.13", "v4.14", "v4.15", "v4.16", "v4.17", "v4.18", "v4.19", "v4.20", "v4.21"), default="v3")
     args = parser.parse_args()
     result = (author_seed(args.output_dir) if args.pilot_version == "v3"
               else author_seed_v4(args.output_dir, version=args.pilot_version))

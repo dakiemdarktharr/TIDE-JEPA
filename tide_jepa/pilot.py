@@ -191,6 +191,7 @@ def freeze_pilot(directory, *, epochs=40, seeds=(17, 23, 41), model_width=32,
                   "v4.18": "tide_jepa/pilot_seed.py:original-ai-authored-v4.18",
         "v4.19": "tide_jepa/pilot_seed.py:original-ai-authored-v4.19",
         "v4.20": "tide_jepa/pilot_seed.py:original-ai-authored-v4.20",
+        "v4.21": "tide_jepa/pilot_seed.py:original-ai-authored-v4.21",
     }.get(version)
     if expected_provenance is None or any(r.provenance_ref != expected_provenance
            or r.license_ref != "original-ai-authored-internal-research; no-PhoMT-content" for r in rows):
@@ -234,7 +235,7 @@ def freeze_pilot(directory, *, epochs=40, seeds=(17, 23, 41), model_width=32,
                   "v4.12": 20261011, "v4.13": 20261012, "v4.14": 20261013,
                   "v4.15": 20261015, "v4.16": 20261017,
                   "v4.17": 20261018, "v4.18": 20261019,
-                  "v4.19": 20261020, "v4.20": 20261021}.get(version, 20261001)
+                  "v4.19": 20261020, "v4.20": 20261021, "v4.21": 20261022}.get(version, 20261001)
     manifest = SplitManifest(dataset_fingerprint(approved_rows), split_seed, fractions, groups,
                              {name: tuple(sorted(r.record_id for r in rows if groups[r.split_group_id] == name))
                               for name in ("train", "validation", "test")})
@@ -343,9 +344,9 @@ def freeze_pilot(directory, *, epochs=40, seeds=(17, 23, 41), model_width=32,
                                      **({"release_holdout_scope": (
                                          "The release holdout uses the same ordered action paths as train and validation; "
                                          "it probes fresh held-out factor combinations only and does not add an action-order shift.")}
-                                        if version in ("v4.18", "v4.19", "v4.20") else {}),
+                                        if version in ("v4.18", "v4.19", "v4.20", "v4.21") else {}),
                                      **({"registered_hypotheses": statement["registered_hypotheses"]}
-                                        if version in ("v4.18", "v4.19", "v4.20") else {}),
+                                        if version in ("v4.18", "v4.19", "v4.20", "v4.21") else {}),
                                      **({"primary_latent_objective_weights": primary_latent_weights}
                                         if primary_latent_weights is not None else {}),
                                      **({"latent_objective_multiplier_scope": [

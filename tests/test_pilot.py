@@ -14,7 +14,7 @@ from tide_jepa.phomt_intake import TRAIN_MEMBERS, _select_pairs
 from tide_jepa.data import dataset_fingerprint, read_jsonl
 from tide_jepa.pilot_seed import (FAMILIES_V43, FAMILIES_V44, FAMILIES_V45,
                                   FAMILIES_V46, FAMILIES_V47, FAMILIES_V48,
-                                  FAMILIES_V49, FAMILIES_V410, FAMILIES_V411, FAMILIES_V412, FAMILIES_V413, FAMILIES_V414, FAMILIES_V415, FAMILIES_V416, FAMILIES_V417, FAMILIES_V418, FAMILIES_V419, FAMILIES_V420, author_seed,
+                                  FAMILIES_V49, FAMILIES_V410, FAMILIES_V411, FAMILIES_V412, FAMILIES_V413, FAMILIES_V414, FAMILIES_V415, FAMILIES_V416, FAMILIES_V417, FAMILIES_V418, FAMILIES_V419, FAMILIES_V420, FAMILIES_V421, author_seed,
                                   author_seed_v4)
 from tide_jepa.schema import Action, Inventory
 
@@ -864,6 +864,23 @@ class SeedAuthoringTests(unittest.TestCase):
                                  and flags["preservation"])(
                 _semantic_frame_flags(row.target_text, row.language, frames[row.target_frame_id]))
                 for row in rows))
+
+    def test_v421_registers_fresh_split_and_copy_decoder_factorial(self):
+        splits = [FAMILIES_V421[name] for name in ("train", "validation", "test")]
+        triples = [tuple(map(int, row[0].removeprefix("compose421_").split("_")))
+                   for split in splits for row in split]
+        self.assertEqual([len(split) for split in splits], [112, 40, 40])
+        self.assertEqual(len(set(triples)), 192)
+        self.assertTrue(all(44 <= triple[0] < 47 for triple in triples))
+        with tempfile.TemporaryDirectory() as temporary:
+            destination = Path(temporary) / "v4.21"
+            statement = author_seed_v4(destination, version="v4.21")
+            self.assertEqual(statement["records"], 15360)
+            self.assertEqual(statement["surface_realizations_per_state"], 4)
+            self.assertFalse(statement["phomt_used"])
+            self.assertFalse(statement["human_validated"])
+            self.assertIn("2x2", statement["split_policy"])
+            self.assertIn("copy_decoder_interaction", statement["registered_hypotheses"])
 
     def test_unique_transition_weighting_rejects_unequal_representation_counts(self):
         from types import SimpleNamespace
