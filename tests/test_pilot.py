@@ -882,6 +882,30 @@ class SeedAuthoringTests(unittest.TestCase):
             self.assertIn("2x2", statement["split_policy"])
             self.assertIn("copy_decoder_interaction", statement["registered_hypotheses"])
 
+            from tide_jepa.pilot import REVIEWED_ARTIFACTS, freeze_pilot
+            artifact_hashes = {name: hashlib.sha256((destination / name).read_bytes()).hexdigest()
+                               for name in REVIEWED_ARTIFACTS}
+            for suffix in ("a", "b"):
+                review = {"schema_version": "tide-jepa-ai-pilot-review-v1",
+                          "reviewer_id": f"fixture-luna-{suffix}", "reviewer_type": "AI",
+                          "decision": "approve", "draft_sha256": statement["draft_sha256"],
+                          "rows_checked": 15360, "artifact_sha256": artifact_hashes,
+                          "human_validated": False}
+                (destination / f"review-{suffix}.json").write_text(json.dumps(review), encoding="utf-8")
+            (destination / "adjudication.json").write_text(json.dumps({
+                "decision": "approve", "draft_sha256": statement["draft_sha256"],
+                "human_validated": False}), encoding="utf-8")
+            freeze_pilot(destination, epochs=1, seeds=(17,), model_width=8, model_heads=2,
+                         condition_modes=("tide",), condition_source_copy_weights=(0.0, 1.5),
+                         condition_source_pointer_decoder_modes=("vocabulary", "source_pointer"),
+                         checkpoint_selection_policy="fixed_final_epoch", compute_source_copy_term=True)
+            protocol = json.loads((destination / "protocol.json").read_text(encoding="utf-8"))
+            self.assertEqual(len(protocol["configs"]), 4)
+            self.assertEqual(protocol["primary_source_copy_weights"], [0.0, 1.5])
+            self.assertEqual(protocol["primary_source_pointer_decoder_modes"], ["vocabulary", "source_pointer"])
+            self.assertTrue(all(name in protocol["registered_hypotheses"]
+                                for name in ("copy_decoder_interaction", "primary_quality_gate")))
+
     def test_unique_transition_weighting_rejects_unequal_representation_counts(self):
         from types import SimpleNamespace
         from tide_jepa.experiment import _transition_record_weights

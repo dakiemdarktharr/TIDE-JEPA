@@ -1,5 +1,7 @@
 # TIDE-JEPA
 
+Current completed evidence is v4.20, whose validation gate failed and release holdout remains sealed. v4.21 is now separately reviewed and frozen for a new 2×2 source-copy × decoder study; training has not started. See [v4.21 preregistered status](VI_EN_RESULTS_V4.21_STATUS.md).
+
 From-scratch research prototype for action-conditioned latent transitions and controlled generation in **Vietnamese, English, and Phan Rang Cham**.
 
 Read [the current specification](tide_jepa_spec.md) first. The [project decision ledger](Obsidian/RMIT%20Hackathon/wiki/Project%20Ground%20Truth.md) records user authority. Earlier MATE-JEPA/La Ha proposals are superseded drafts.

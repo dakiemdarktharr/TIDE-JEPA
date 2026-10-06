@@ -21,6 +21,8 @@ The research scope remains controlled generation of Vietnamese, English, and Pha
 
 **Exit artifact:** validated data schema, tokenizer contract, group-safe split manifest API, record-to-batch adapter, regression tests, and a synthetic-only smoke fixture. No language-quality claim.
 
+v4.21 is frozen but not yet trained: fresh artifact-bound AI reviews, a 2×2 TIDE copy-loss/decoder protocol, and a fresh sealed release holdout. Training and validation remain pending; see [v4.21 status](VI_EN_RESULTS_V4.21_STATUS.md).
+
 ## Milestone 4 — approved pilot corpus and preregistered benchmark
 
 **Question:** Does TIDE-JEPA help on a real, narrow linguistic task beyond token-only and simpler JEPA controls under the same data and compute budget?

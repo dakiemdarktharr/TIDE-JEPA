@@ -11,6 +11,7 @@ This folder is an Obsidian-compatible, project-local knowledge vault. Open this 
 - [[experiments/index]] — AI-reviewed synthetic Vi–En preliminary pilots; v4.20 completed training and validation, failed the quality gate, and retained its sealed holdout.
 - [v4.20 status](../../VI_EN_RESULTS_V4.20_STATUS.md) — six decoder-comparison runs complete; validation gate failed and release holdout remains sealed.
 - [v4.20 validation report](../../VI_EN_RESULTS_V4.20_VALIDATION.md) — aggregate-only validation outcomes by decoder, language, action, path, and seed.
+- [v4.21 frozen status](../../VI_EN_RESULTS_V4.21_STATUS.md) — fresh 2×2 source-copy × decoder protocol; independent reviews complete, no result yet.
 - [v4.19 status](../../VI_EN_RESULTS_V4.19_STATUS.md) — 12/12 runs and validation complete; 0/12 configurations passed, release holdout remains sealed.
 - [v4.19 validation report](../../VI_EN_RESULTS_V4.19_VALIDATION.md) — aggregate-only frozen gate, denominators, and per-seed bucket outcomes.
 - [v4.13 status](../../VI_EN_RESULTS_V4.13_STATUS.md) — fresh, independently Luna-reviewed dose-response; 12/12 runs completed, both primary TIDE gates failed and holdout remains sealed.
