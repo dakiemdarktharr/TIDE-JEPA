@@ -1,0 +1,73 @@
+{
+  "gold": {
+    "action_and_preservation_pass": 7168,
+    "covered": 7168,
+    "examples": 7168
+  },
+  "human_validated": false,
+  "implementation": "workspace",
+  "implementation_sha256": {
+    "__init__.py": "7e3995f7569067e876ca785adb95f1e76e956fa89521b3e80a9fd3ae031b8680",
+    "config.py": "df73deb5760789da677787f5642a941238446e0751795897809da1fc81204e5d",
+    "data.py": "af209c3d0f265ad4ae414d4f40db12aabf8e3c194ce9e09d2db53c0b8c1709a5",
+    "demo.html": "596304d1271d56e23e818dab3d10d63112a689ecc525c86f10b9ec43c939eed5",
+    "demo.py": "faa20c65e318c5130eac64a524d9a6bc09a794045ec2143638580a8742c42a8b",
+    "experiment.py": "4f475088d3b07542f1bec87bfcc706dea09f04191e5934367e9c88402c46d025",
+    "infer.py": "90150af4bbdc547f99ac404644060c0513079dc2e5b4450e84a06a779deb1c69",
+    "model.py": "ba1ecad602f1ad1a47da5cbcdbc1bcc03565f7e94bcf09d2928a522823e30701",
+    "phomt_audit.py": "c9c5a7dc1b87b97734b8c651afb6bf9b8cf489f0a96809abd92dac900fcbaf32",
+    "phomt_intake.py": "7fe1668c7a204a920d7534744bc089fbacdf2e1db967d19a1d820dc0102c2911",
+    "pilot.py": "5b5d5d779851d4ad59b5ec750827afc46c5fb5495b50a6f30f40558ab9c13d14",
+    "pilot_seed.py": "91aaf6eac196cfda888aac476dce4749fa4ec171e776fa82b044fae92cc0f130",
+    "schema.py": "aed71ba52d4e490428bebfeed565c189b57c9c738cd1f935a9c360a15c22db4b",
+    "training.py": "02176ef24e815a47c85460407fecfe3e5834d8844c0e097cf7c37976e4103028"
+  },
+  "negative_controls": {
+    "en/agent": {
+      "cases": 3584,
+      "rejected_as_expected": 3584
+    },
+    "en/patient": {
+      "cases": 3584,
+      "rejected_as_expected": 3584
+    },
+    "en/place": {
+      "cases": 3584,
+      "rejected_as_expected": 3584
+    },
+    "en/time": {
+      "cases": 3584,
+      "rejected_as_expected": 3584
+    },
+    "vi/agent": {
+      "cases": 3584,
+      "rejected_as_expected": 3584
+    },
+    "vi/patient": {
+      "cases": 3584,
+      "rejected_as_expected": 3584
+    },
+    "vi/place": {
+      "cases": 3584,
+      "rejected_as_expected": 3584
+    },
+    "vi/time": {
+      "cases": 3584,
+      "rejected_as_expected": 3584
+    },
+    "vi/vi_progressive": {
+      "cases": 1792,
+      "rejected_as_expected": 1792
+    }
+  },
+  "not_frozen_protocol_evidence": true,
+  "phomt_used": false,
+  "protocol_sha256": "748119b1291ada27dec2731a2e53e7a0c9e8d16d804f0c113c408fdbdbf9dc77",
+  "release_holdout_opened": false,
+  "review_bundle_sha256": "150bf7d80fe220088a53b0207214f2080ffa0771c63f5775c6529df76b30a5a1",
+  "scope": "train-only checker mechanism audit on approved-scope synthetic references",
+  "script_sha256": "6364e774992f1a437f01b73994d22bc8cca4a808c4ff399f96b79ba45398dff3",
+  "status": "pass",
+  "text_emitted": false,
+  "validation_rows_scored": false
+}

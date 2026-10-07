@@ -14,6 +14,8 @@ sys.path.insert(0, str(PROJECT_ROOT))
 
 
 def _train_one(base_text, config_name):
+    from scripts.run_frozen import load_frozen_package
+    load_frozen_package(base_text)
     import torch
     from tide_jepa.experiment import run_experiment
 
@@ -30,7 +32,21 @@ def _train_one(base_text, config_name):
             "best_validation_loss": result["best_validation_loss"]}
 
 
+def checker_preflight(base, protocol):
+    if protocol.get("review_scope") != "train-validation-only":
+        return
+    from scripts.audit_research_checker import audit
+    checker = audit(base, implementation="frozen")
+    if checker["status"] != "pass":
+        raise ValueError("frozen semantic checker failed train-reference negative controls; "
+                         "repair the checker in a new reviewed protocol before launching this matrix")
+    print(json.dumps({"checker_preflight": "pass", "train_references": checker["gold"]["examples"],
+                      "release_holdout_opened": False}, sort_keys=True), flush=True)
+
+
 def train_all(directory, *, workers=4):
+    from scripts.run_frozen import load_frozen_package
+    load_frozen_package(directory)
     from tide_jepa.experiment import _implementation_identity, _runtime_identity
     from tide_jepa.pilot import _hash_file
 
@@ -48,6 +64,7 @@ def train_all(directory, *, workers=4):
             or protocol.get("approval_sha256") != _hash_file(base / "approval.json")
             or protocol.get("config_files_sha256") != {name: _hash_file(base / name) for name in names}):
         raise ValueError("current config/approval/code/runtime differs from frozen training protocol")
+    checker_preflight(base, protocol)
     results = []
     with ProcessPoolExecutor(max_workers=workers) as pool:
         pending = {pool.submit(_train_one, str(base), name): name for name in protocol["configs"]}

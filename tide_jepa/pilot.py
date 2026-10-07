@@ -22,7 +22,7 @@ from .schema import Action, Inventory
 
 
 MODES = ("token_only", "generic_jepa", "static_alignment", "tide")
-REVIEWED_ARTIFACTS = ("inventory.draft.json", "alignments.draft.json", "groups.json", "data_statement.json", "semantic_frames.draft.json")
+REVIEWED_ARTIFACTS = ("corpus.draft.jsonl", "inventory.draft.json", "alignments.draft.json", "groups.json", "data_statement.json", "semantic_frames.draft.json")
 
 
 def _quality_gate_status(primary_mode, objective_mode, bucket_checks):
@@ -68,6 +68,10 @@ def _registered_primary_configs(protocol, named_configs):
         config.get("objective", {}).get("latent_objective_weight", 1.0) for _, config in configs]))
     balances = set(protocol.get("primary_transition_balance_modes", ["row_uniform"]))
     decoders = set(protocol.get("primary_source_pointer_decoder_modes", ["vocabulary"]))
+    sampling_rates = set(protocol.get("primary_scheduled_sampling_rates", [
+        config.get("objective", {}).get("scheduled_sampling_rate", 0.0) for _, config in configs]))
+    language_balance_weights = set(protocol.get("primary_language_balance_weights", [
+        config.get("objective", {}).get("language_balance_weight", 0.0) for _, config in configs]))
     selected = []
     signatures = []
     for name, config in configs:
@@ -76,14 +80,25 @@ def _registered_primary_configs(protocol, named_configs):
         latent = objective.get("latent_objective_weight", 1.0)
         balance = config.get("training", {}).get("transition_balance", "row_uniform")
         decoder = "source_pointer" if config.get("model", {}).get("source_pointer_decoder", False) else "vocabulary"
-        if weight in weights and latent in latent_weights and balance in balances and decoder in decoders:
+        sampling_rate = objective.get("scheduled_sampling_rate", 0.0)
+        language_balance_weight = objective.get("language_balance_weight", 0.0)
+        if (weight in weights and latent in latent_weights and balance in balances
+                and decoder in decoders and sampling_rate in sampling_rates
+                and language_balance_weight in language_balance_weights):
             selected.append((name, config))
-            signatures.append((config.get("seed"), weight, latent, balance, decoder))
+            signatures.append((config.get("seed"), weight, latent, balance, decoder,
+                               sampling_rate, language_balance_weight))
     expected = {(seed, weight, latent, balance, decoder)
                 for seed in protocol.get("seeds", []) for weight in weights
                 for latent in latent_weights for balance in balances for decoder in decoders}
+    expected = {(seed, weight, latent, balance, decoder, sampling_rate)
+                for seed, weight, latent, balance, decoder in expected
+                for sampling_rate in sampling_rates}
+    expected = {(seed, weight, latent, balance, decoder, sampling_rate, language_balance_weight)
+                for seed, weight, latent, balance, decoder, sampling_rate in expected
+                for language_balance_weight in language_balance_weights}
     if not expected or len(signatures) != len(expected) or set(signatures) != expected:
-        raise ValueError("primary validation evidence does not cover every frozen seed/objective/decoder condition")
+        raise ValueError("primary validation evidence does not cover every frozen seed/objective/decoder condition and scheduled-sampling rate")
     return selected
 
 
@@ -93,6 +108,8 @@ def freeze_pilot(directory, *, epochs=40, seeds=(17, 23, 41), model_width=32,
                  condition_modes=None, condition_source_copy_weights=None,
                  condition_latent_objective_weights=None, condition_transition_balances=None,
                  condition_source_pointer_decoder_modes=None,
+                 condition_scheduled_sampling_rates=None,
+                 condition_language_balance_weights=None,
                  checkpoint_selection_policy="validation_loss", compute_source_copy_term=False):
     """Bind two distinct AI review records and adjudication to an exact draft.
 
@@ -130,6 +147,10 @@ def freeze_pilot(directory, *, epochs=40, seeds=(17, 23, 41), model_width=32,
                            if condition_transition_balances is not None else ("row_uniform",))
     pointer_decoder_modes = (tuple(condition_source_pointer_decoder_modes)
                               if condition_source_pointer_decoder_modes is not None else ("vocabulary",))
+    sampling_rates = (tuple(condition_scheduled_sampling_rates)
+                      if condition_scheduled_sampling_rates is not None else (0.0,))
+    language_balance_weights = (tuple(condition_language_balance_weights)
+                                if condition_language_balance_weights is not None else (0.0,))
     if (not selected_modes or len(set(selected_modes)) != len(selected_modes)
             or any(mode not in MODES for mode in selected_modes)
             or primary_mode not in selected_modes):
@@ -148,6 +169,16 @@ def freeze_pilot(directory, *, epochs=40, seeds=(17, 23, 41), model_width=32,
     if (not pointer_decoder_modes or len(set(pointer_decoder_modes)) != len(pointer_decoder_modes)
             or any(value not in ("vocabulary", "source_pointer") for value in pointer_decoder_modes)):
         raise ValueError("condition source-pointer decoder modes must be unique registered modes")
+    if (not sampling_rates or len(set(sampling_rates)) != len(sampling_rates)
+            or any(not isinstance(value, (int, float)) or isinstance(value, bool)
+                   or not math.isfinite(value) or not 0.0 <= value < 1.0
+                   for value in sampling_rates)):
+        raise ValueError("condition scheduled-sampling rates must be unique finite values in [0, 1)")
+    if (not language_balance_weights or len(set(language_balance_weights)) != len(language_balance_weights)
+            or any(not isinstance(value, (int, float)) or isinstance(value, bool)
+                   or not math.isfinite(value) or not 0.0 <= value <= 1.0
+                   for value in language_balance_weights)):
+        raise ValueError("condition language-balance weights must be unique finite values in [0, 1]")
     if condition_latent_objective_weights is not None and primary_mode != "tide":
         raise ValueError("latent-objective dose registration currently requires tide as the primary mode")
     if compute_source_copy_term and set(selected_modes) != {"tide"}:
@@ -155,6 +186,8 @@ def freeze_pilot(directory, *, epochs=40, seeds=(17, 23, 41), model_width=32,
     custom_matrix = (condition_modes is not None or condition_source_copy_weights is not None
                      or condition_latent_objective_weights is not None or condition_transition_balances is not None
                      or condition_source_pointer_decoder_modes is not None
+                     or condition_scheduled_sampling_rates is not None
+                     or condition_language_balance_weights is not None
                      or checkpoint_selection_policy != "validation_loss" or compute_source_copy_term)
     draft_inventory = _read(base / "inventory.draft.json")
     actions = tuple(Action(**item) for item in draft_inventory["actions"])
@@ -194,6 +227,13 @@ def freeze_pilot(directory, *, epochs=40, seeds=(17, 23, 41), model_width=32,
         "v4.21": "tide_jepa/pilot_seed.py:original-ai-authored-v4.21",
         "v4.22": "tide_jepa/pilot_seed.py:original-ai-authored-v4.22",
         "v4.23": "tide_jepa/pilot_seed.py:original-ai-authored-v4.23",
+        "v4.24": "tide_jepa/pilot_seed.py:original-ai-authored-v4.24",
+        "v4.25": "tide_jepa/pilot_seed.py:original-ai-authored-v4.25",
+        "v4.26": "tide_jepa/pilot_seed.py:original-ai-authored-v4.26",
+        "v4.27": "tide_jepa/pilot_seed.py:original-ai-authored-v4.27",
+        "v4.28": "tide_jepa/pilot_seed.py:original-ai-authored-v4.28",
+        "v4.29": "tide_jepa/pilot_seed.py:original-ai-authored-v4.29",
+        "v4.30": "tide_jepa/pilot_seed.py:original-ai-authored-v4.30",
     }.get(version)
     if expected_provenance is None or any(r.provenance_ref != expected_provenance
            or r.license_ref != "original-ai-authored-internal-research; no-PhoMT-content" for r in rows):
@@ -207,14 +247,44 @@ def freeze_pilot(directory, *, epochs=40, seeds=(17, 23, 41), model_width=32,
     required_frames = {frame for row in rows for frame in (row.source_frame_id, row.target_frame_id)}
     if set(frames) != required_frames:
         raise ValueError("semantic frame catalog must describe every and only referenced frame")
+    groups = _read(base / "groups.json")
+    train_validation_rows = sum(groups[row.split_group_id] != "test" for row in rows)
+    review_scope = statement.get("review_scope", "all-splits")
+    expected_review_count = statement.get("reviewed_records", len(rows))
+    expected_scope_count = train_validation_rows if review_scope == "train-validation-only" else len(rows)
+    if review_scope not in {"all-splits", "train-validation-only"} or expected_review_count != expected_scope_count:
+        raise ValueError("data statement review scope/count does not match the frozen split")
+    review_bundle_sha256 = None
+    if statement.get("version") in {"vi-en-ai-v4.29", "vi-en-ai-v4.30"}:
+        bundle = base / statement.get("review_bundle_dir", "review_bundle")
+        manifest_path = bundle / "manifest.json"
+        if not manifest_path.is_file():
+            raise ValueError("this version requires its train/validation-only review bundle")
+        bundle_manifest = _read(manifest_path)
+        if (bundle_manifest.get("review_scope") != "train-validation-only"
+                or bundle_manifest.get("reviewed_records") != expected_review_count
+                or statement.get("review_bundle_sha256") != _hash_file(manifest_path)):
+            raise ValueError("review bundle identity or scope does not match")
+        if any(_hash_file(bundle / name) != digest
+               for name, digest in bundle_manifest.get("files_sha256", {}).items()):
+            raise ValueError("review bundle contents changed")
+        scoped_groups = _read(bundle / "groups.json")
+        scoped_rows = [json.loads(line) for line in (bundle / "records.jsonl").read_text(encoding="utf-8").splitlines()]
+        if (len(scoped_rows) != expected_review_count
+                or any(group not in scoped_groups or scoped_groups[group] == "test"
+                       for group in (row["split_group_id"] for row in scoped_rows))):
+            raise ValueError("review bundle contains records outside train/validation")
+        review_bundle_sha256 = _hash_file(manifest_path)
     reviews = [_read(base / name) for name in ("review-a.json", "review-b.json")]
     if len({r.get("reviewer_id") for r in reviews}) != 2:
         raise ValueError("two distinct AI reviewers are required")
     pending_adjudication = []
     for review in reviews:
         if (review.get("reviewer_type") != "AI" or review.get("decision") not in ("approve", "needs-adjudication")
-                or review.get("draft_sha256") != draft_sha or review.get("rows_checked") != len(rows)
-                or review.get("artifact_sha256") != reviewed_hashes):
+                or review.get("draft_sha256") != draft_sha or review.get("rows_checked") != expected_review_count
+                or review.get("artifact_sha256") != reviewed_hashes
+                or (review_bundle_sha256 is not None
+                    and review.get("review_bundle_sha256") != review_bundle_sha256)):
             raise ValueError("review missing, pending, rejected, or bound to different artifacts")
         if review["decision"] == "needs-adjudication":
             pending_adjudication.append(review["reviewer_id"])
@@ -230,7 +300,6 @@ def freeze_pilot(directory, *, epochs=40, seeds=(17, 23, 41), model_width=32,
             or not adjudication.get("resolution")):
         raise ValueError("explicit artifact-bound adjudication is required for pending reviews")
     approved_rows = tuple(replace(row, approval_status="approved") for row in rows)
-    groups = _read(base / "groups.json")
     fractions = {name: sum(r.split_group_id in {g for g, s in groups.items() if s == name} for r in rows) / len(rows)
                  for name in ("train", "validation", "test")}
     split_seed = {"v4.9": 20261008, "v4.10": 20261009, "v4.11": 20261010,
@@ -238,7 +307,11 @@ def freeze_pilot(directory, *, epochs=40, seeds=(17, 23, 41), model_width=32,
                   "v4.15": 20261015, "v4.16": 20261017,
                   "v4.17": 20261018, "v4.18": 20261019,
                   "v4.19": 20261020, "v4.20": 20261021, "v4.21": 20261022,
-                  "v4.22": 20261023, "v4.23": 20261024}.get(version, 20261001)
+                  "v4.22": 20261023, "v4.23": 20261024,
+                  "v4.24": 20261027, "v4.25": 20261028,
+                  "v4.26": 20261029, "v4.27": 20261030,
+                  "v4.28": 20261031, "v4.29": 20261032,
+                  "v4.30": 20261033}.get(version, 20261001)
     manifest = SplitManifest(dataset_fingerprint(approved_rows), split_seed, fractions, groups,
                              {name: tuple(sorted(r.record_id for r in rows if groups[r.split_group_id] == name))
                               for name in ("train", "validation", "test")})
@@ -283,38 +356,50 @@ def freeze_pilot(directory, *, epochs=40, seeds=(17, 23, 41), model_width=32,
                 for latent_weight in mode_latent_weights:
                     for transition_balance in transition_balances:
                         for pointer_decoder_mode in pointer_decoder_modes:
-                            weight_slug = str(condition_weight).replace(".", "p")
-                            latent_slug = str(latent_weight).replace(".", "p")
-                            name_prefix = (f"{mode}-aux-{latent_slug}" if condition_latent_objective_weights is not None and mode == "tide"
-                                           else mode)
-                            if condition_transition_balances is not None:
-                                name_prefix += f"-balance-{transition_balance}"
-                            if condition_source_pointer_decoder_modes is not None:
-                                name_prefix += f"-decoder-{pointer_decoder_mode}"
-                            name = (f"{name_prefix}-copy-{weight_slug}-seed-{seed}.json" if custom_matrix
-                                    else f"{name_prefix}-seed-{seed}.json")
-                            output_name = (f"{name_prefix}-copy-{weight_slug}-seed-{seed}" if custom_matrix
-                                           else f"{name_prefix}-seed-{seed}")
-                            objective_config = {"mode": mode, **({"source_copy_weight": condition_weight}
-                                                                    if condition_weight else {})}
-                            if compute_source_copy_term:
-                                objective_config["compute_source_copy_term"] = True
-                            if condition_latent_objective_weights is not None and mode == "tide":
-                                objective_config["latent_objective_weight"] = latent_weight
-                            config = {"corpus": "corpus.jsonl", "inventory": "inventory.json", "alignments": "alignments.json",
-                                      "frozen_split": "split_manifest.json", "review_gate": "approval.json", "languages": ["en", "vi"],
-                                      "output_dir": os.path.relpath(root / "runs" / base.name / output_name, base),
-                                      "seed": seed, "model": {"width": model_width, "heads": model_heads,
-                                                                "layers": model_layers, "max_length": max_length,
-                                                                "source_pointer_decoder": pointer_decoder_mode == "source_pointer"},
-                                      "objective": objective_config,
-                                      **({"checkpoint_selection_policy": checkpoint_selection_policy}
-                                         if checkpoint_selection_policy != "validation_loss" else {}),
-                                      "training": {"epochs": epochs, "batch_size": batch_size,
-                                                   "learning_rate": learning_rate,
-                                                   "transition_balance": transition_balance}}
-                            _write(base / name, config)
-                            config_names.append(name)
+                            for sampling_rate in sampling_rates:
+                              for language_balance_weight in language_balance_weights:
+                                weight_slug = str(condition_weight).replace(".", "p")
+                                latent_slug = str(latent_weight).replace(".", "p")
+                                sampling_slug = str(sampling_rate).replace(".", "p")
+                                language_balance_slug = str(language_balance_weight).replace(".", "p")
+                                name_prefix = (f"{mode}-aux-{latent_slug}" if condition_latent_objective_weights is not None and mode == "tide"
+                                               else mode)
+                                if condition_transition_balances is not None:
+                                    name_prefix += f"-balance-{transition_balance}"
+                                if condition_source_pointer_decoder_modes is not None:
+                                    name_prefix += f"-decoder-{pointer_decoder_mode}"
+                                if condition_scheduled_sampling_rates is not None:
+                                    name_prefix += f"-ss-{sampling_slug}"
+                                if condition_language_balance_weights is not None:
+                                    name_prefix += f"-langbal-{language_balance_slug}"
+                                name = (f"{name_prefix}-copy-{weight_slug}-seed-{seed}.json" if custom_matrix
+                                        else f"{name_prefix}-seed-{seed}.json")
+                                output_name = (f"{name_prefix}-copy-{weight_slug}-seed-{seed}" if custom_matrix
+                                               else f"{name_prefix}-seed-{seed}")
+                                objective_config = {"mode": mode, **({"source_copy_weight": condition_weight}
+                                                                        if condition_weight else {})}
+                                if compute_source_copy_term:
+                                    objective_config["compute_source_copy_term"] = True
+                                if condition_latent_objective_weights is not None and mode == "tide":
+                                    objective_config["latent_objective_weight"] = latent_weight
+                                if condition_scheduled_sampling_rates is not None:
+                                    objective_config["scheduled_sampling_rate"] = sampling_rate
+                                if condition_language_balance_weights is not None:
+                                    objective_config["language_balance_weight"] = language_balance_weight
+                                config = {"corpus": "corpus.jsonl", "inventory": "inventory.json", "alignments": "alignments.json",
+                                          "frozen_split": "split_manifest.json", "review_gate": "approval.json", "languages": ["en", "vi"],
+                                          "output_dir": os.path.relpath(root / "runs" / base.name / output_name, base),
+                                          "seed": seed, "model": {"width": model_width, "heads": model_heads,
+                                                                    "layers": model_layers, "max_length": max_length,
+                                                                    "source_pointer_decoder": pointer_decoder_mode == "source_pointer"},
+                                          "objective": objective_config,
+                                          **({"checkpoint_selection_policy": checkpoint_selection_policy}
+                                             if checkpoint_selection_policy != "validation_loss" else {}),
+                                          "training": {"epochs": epochs, "batch_size": batch_size,
+                                                       "learning_rate": learning_rate,
+                                                       "transition_balance": transition_balance}}
+                                _write(base / name, config)
+                                config_names.append(name)
     # Local review files are assertions, not cryptographic proof of reviewer
     # identity. Actual independent Luna dispatch/review evidence is recorded by
     # the project owner; people with write access can alter every local gate.
@@ -334,6 +419,16 @@ def freeze_pilot(directory, *, epochs=40, seeds=(17, 23, 41), model_width=32,
                                      "modes": list(selected_modes), "seeds": list(seeds), "epochs": epochs,
                                      "primary_quality_mode": primary_mode,
                                      "primary_source_copy_weights": primary_weights,
+                                     "primary_scheduled_sampling_rates": sorted(set(sampling_rates)),
+                                     **({"primary_language_balance_weights": sorted(set(language_balance_weights))}
+                                        if condition_language_balance_weights is not None else {}),
+                                     **({"review_scope": review_scope, "reviewed_records": expected_review_count}
+                                        if review_scope != "all-splits" else {}),
+                                     **({"review_bundle_sha256": review_bundle_sha256}
+                                        if review_bundle_sha256 is not None else {}),
+                                     **({"language_balance_scope": (
+                                         "Base per-edge token CE only: per-example token-normalized CE is edge-weight averaged within each language and then equally averaged across present languages. Composed path-token CE and auxiliary terms are unchanged across conditions.")}
+                                        if condition_language_balance_weights is not None else {}),
                                      "primary_transition_balance_modes": primary_transition_balances,
                                      "transition_balance_scope": ("base per-edge token, source-copy, JEPA, alignment, and variance losses; path-composition losses remain unweighted"
                                                                   if condition_transition_balances is not None else "uniform record-row weighting"),
@@ -347,9 +442,9 @@ def freeze_pilot(directory, *, epochs=40, seeds=(17, 23, 41), model_width=32,
                                      **({"release_holdout_scope": (
                                          "The release holdout uses the same ordered action paths as train and validation; "
                                          "it probes fresh held-out factor combinations only and does not add an action-order shift.")}
-                                        if version in ("v4.18", "v4.19", "v4.20", "v4.21", "v4.22", "v4.23") else {}),
+                                        if version in ("v4.18", "v4.19", "v4.20", "v4.21", "v4.22", "v4.23", "v4.24", "v4.25", "v4.26", "v4.27", "v4.28", "v4.29", "v4.30") else {}),
                                      **({"registered_hypotheses": statement["registered_hypotheses"]}
-                                        if version in ("v4.18", "v4.19", "v4.20", "v4.21", "v4.22", "v4.23") else {}),
+                                        if version in ("v4.18", "v4.19", "v4.20", "v4.21", "v4.22", "v4.23", "v4.24", "v4.25", "v4.26", "v4.27", "v4.28", "v4.29", "v4.30") else {}),
                                      **({"primary_latent_objective_weights": primary_latent_weights}
                                         if primary_latent_weights is not None else {}),
                                      **({"latent_objective_multiplier_scope": [
@@ -379,7 +474,9 @@ def freeze_pilot(directory, *, epochs=40, seeds=(17, 23, 41), model_width=32,
                                                             "held_out_path_action_fidelity_rate": 0.8,
                                                             "held_out_path_preservation_rate": 0.8,
                                                             "scope": "each language/action bucket using the narrow synthetic frame checker"},
-                                     "compute_policy": ("Decoder-mode conditions share corpus, split, objective, seeds, examples, epochs, and batch order. Vocabulary-softmax and source-pointer variants differ in parameter count and per-token operations; no matched-FLOP claim is made. Log updates, tokens, wall time, and throughput."
+                                     "compute_policy": ("Scheduled-sampling conditions use the same model, examples, epochs, and seed-wise batch order. A positive rate adds a no-gradient proposal forward and a gradient-bearing self-fed forward for both single-edge and path decoding; this costs more compute, so no matched-FLOP claim is made. Log updates, tokens, wall time, and throughput."
+                                                        if condition_scheduled_sampling_rates is not None else
+                                                        "Decoder-mode conditions share corpus, split, objective, seeds, examples, epochs, and batch order. Vocabulary-softmax and source-pointer variants differ in parameter count and per-token operations; no matched-FLOP claim is made. Log updates, tokens, wall time, and throughput."
                                                         if condition_source_pointer_decoder_modes is not None else
                                                         "TIDE-only conditions share architecture, examples, epochs, seed-wise batch order, and all loss computations; source-copy loss is computed in every condition and only its registered multiplier differs. Updates, tokens, and wall time are logged."
                                                         if compute_source_copy_term else
@@ -433,7 +530,9 @@ def _semantic_frame_flags(text, language, frame):
                              FAMILIES_V49, FAMILIES_V410, FAMILIES_V411, FAMILIES_V412,
                              FAMILIES_V413, FAMILIES_V414, FAMILIES_V415, FAMILIES_V416,
                              FAMILIES_V417, FAMILIES_V418, FAMILIES_V419, FAMILIES_V420,
-                             FAMILIES_V421, FAMILIES_V422, FAMILIES_V423)
+                             FAMILIES_V421, FAMILIES_V422, FAMILIES_V423, FAMILIES_V424,
+                             FAMILIES_V425, FAMILIES_V426, FAMILIES_V427, FAMILIES_V428,
+                             FAMILIES_V429, FAMILIES_V430)
     event = frame.get("event")
     definition = next((item for family_set in (FAMILIES_V4, FAMILIES_V42, FAMILIES_V43,
                                                FAMILIES_V44, FAMILIES_V45, FAMILIES_V46,
@@ -441,7 +540,10 @@ def _semantic_frame_flags(text, language, frame):
                                                FAMILIES_V411, FAMILIES_V412, FAMILIES_V413,
                                                FAMILIES_V414, FAMILIES_V415, FAMILIES_V416,
                                                FAMILIES_V417, FAMILIES_V418, FAMILIES_V419,
-                                               FAMILIES_V420, FAMILIES_V421, FAMILIES_V422, FAMILIES_V423)
+                                               FAMILIES_V420, FAMILIES_V421, FAMILIES_V422,
+                                               FAMILIES_V423, FAMILIES_V424, FAMILIES_V425,
+                                               FAMILIES_V426, FAMILIES_V427, FAMILIES_V428, FAMILIES_V429,
+                                               FAMILIES_V430)
                        for group in family_set.values() for item in group if item[0] == event), None)
     if definition is None:
         return None
@@ -478,10 +580,20 @@ def _semantic_frame_flags(text, language, frame):
         agent, patient = agent_vi, patient_vi
         place = frame.get("place_vi")
         required_markers.append("hôm qua" if frame["time"] == "past" else "bây giờ")
-        progressive_now = (event.startswith("compose423_") and frame["time"] != "past"
-                           and frame["polarity"] == "positive")
-        verb_phrase = ("không " + verb_vi) if frame["polarity"] == "negative" else (
-            ("đã " if frame["time"] == "past" else "đang " if progressive_now else "") + verb_vi)
+        progressive_now = (event.startswith(("compose423_", "compose424_", "compose425_", "compose426_", "compose427_", "compose428_", "compose429_", "compose430_"))
+                           and frame["time"] != "past"
+                           and (frame["polarity"] == "positive"
+                                or event.startswith(("compose424_", "compose425_", "compose426_", "compose427_", "compose428_", "compose429_", "compose430_"))))
+        # New drafts declare the Vietnamese present form explicitly. Keep the
+        # legacy fallback for previously frozen annotations, including v4.30.
+        declared_present = frame.get("predicate_vi_present")
+        if frame["time"] != "past" and declared_present is not None:
+            verb_phrase = declared_present
+            progressive_now = "đang" in _norm_text(declared_present).split()
+        elif frame["polarity"] == "negative":
+            verb_phrase = ("đang không " if progressive_now else "không ") + verb_vi
+        else:
+            verb_phrase = ("đã " if frame["time"] == "past" else "đang " if progressive_now else "") + verb_vi
         agent_present = _norm_text(agent) in normalized
         patient_present = _norm_text(patient) in normalized
         predicate_present = _norm_text(verb_phrase) in normalized
@@ -502,6 +614,8 @@ def _semantic_frame_flags(text, language, frame):
     return {"action_fidelity": bool(action), "preservation": bool(preservation),
             "agent_preserved": bool(agent_present), "patient_preserved": bool(patient_present),
             "predicate_preserved": bool(predicate_present), "place_preserved": place_present,
+            "context_preserved": bool(place_present) if place_present is not None else None,
+            "context_checker_scope": "v4.14+ shared-workshop context is operationalized only as the declared language-specific place marker; broader discourse context is not checked",
             "checker_scope": "v4 synthetic tense/polarity grammar; event roles and listed surface forms only"}
 
 
@@ -687,7 +801,8 @@ def evaluate_generation(config_path, *, max_new_tokens=160, split="test"):
         total = totals.setdefault(bucket, {"examples": 0, "accepted_reference_matches": 0,
             "valid_unicode": 0, "terminated_eos": 0, "nonempty": 0,
             "action_fidelity_pass": 0, "action_fidelity_known": 0,
-            "preservation_pass": 0, "preservation_known": 0, "checker_coverage": 0,
+            "preservation_pass": 0, "preservation_known": 0,
+            "context_preservation_pass": 0, "context_preservation_known": 0, "checker_coverage": 0,
             "edit_distance": 0, "reference_characters": 0})
         normalized_generated = _norm_text(generated)
         accepted_match = any(normalized_generated == _norm_text(reference) for reference in references)
@@ -704,6 +819,9 @@ def evaluate_generation(config_path, *, max_new_tokens=160, split="test"):
             total["checker_coverage"] += 1
             total["action_fidelity_pass"] += int(semantic["action_fidelity"])
             total["preservation_pass"] += int(semantic["preservation"])
+            if semantic.get("context_preserved") is not None:
+                total["context_preservation_known"] += 1
+                total["context_preservation_pass"] += int(semantic["context_preserved"])
         total["edit_distance"] += _edit_distance(generated, best_reference)
         total["reference_characters"] += len(best_reference)
         private.append({"record_id": record_id, "language": language, "task": task,
@@ -718,6 +836,9 @@ def evaluate_generation(config_path, *, max_new_tokens=160, split="test"):
                                          if total["action_fidelity_known"] else None)
         total["preservation_rate"] = (total["preservation_pass"] / total["preservation_known"]
                                       if total["preservation_known"] else None)
+        total["context_preservation_rate"] = (
+            total["context_preservation_pass"] / total["context_preservation_known"]
+            if total["context_preservation_known"] else None)
         total["checker_coverage_rate"] = total["checker_coverage"] / total["examples"]
         total["character_error_rate"] = total["edit_distance"] / total["reference_characters"]
     thresholds = protocol.get("quality_thresholds", {})
@@ -834,6 +955,8 @@ def main():
                         choices=("row_uniform", "unique_transition"))
     parser.add_argument("--condition-source-pointer-decoder-modes", nargs="+",
                         choices=("vocabulary", "source_pointer"))
+    parser.add_argument("--condition-scheduled-sampling-rates", nargs="+", type=float)
+    parser.add_argument("--condition-language-balance-weights", nargs="+", type=float)
     parser.add_argument("--checkpoint-selection-policy", choices=("validation_loss", "fixed_final_epoch"),
                         default="validation_loss")
     parser.add_argument("--compute-source-copy-term", action="store_true")
@@ -851,6 +974,8 @@ def main():
                               condition_latent_objective_weights=args.condition_latent_objective_weights,
                               condition_transition_balances=args.condition_transition_balances,
                               condition_source_pointer_decoder_modes=args.condition_source_pointer_decoder_modes,
+                              condition_scheduled_sampling_rates=args.condition_scheduled_sampling_rates,
+                              condition_language_balance_weights=args.condition_language_balance_weights,
                               checkpoint_selection_policy=args.checkpoint_selection_policy,
                               compute_source_copy_term=args.compute_source_copy_term)
     elif args.command == "run":

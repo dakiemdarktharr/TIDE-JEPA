@@ -107,6 +107,8 @@ class Objective:
     path_alignment_weight: float = 1.0
     source_copy_weight: float = 0.0
     compute_source_copy_term: bool = False
+    language_balance_weight: float = 0.0
+    scheduled_sampling_rate: float = 0.0
     ema_momentum: float = 0.99
     grad_clip: float = 1.0
 
@@ -122,18 +124,67 @@ class Objective:
             self.path_token_weight,
             self.path_alignment_weight,
             self.source_copy_weight,
+            self.language_balance_weight,
         )
         if any(not math.isfinite(v) or v < 0 for v in weights):
             raise ValueError("loss weights must be finite and nonnegative")
         if type(self.compute_source_copy_term) is not bool:
             raise ValueError("compute_source_copy_term must be boolean")
+        if (not isinstance(self.language_balance_weight, (int, float))
+                or isinstance(self.language_balance_weight, bool)):
+            raise ValueError("language_balance_weight must be a numeric value in [0, 1]")
+        if self.language_balance_weight > 1.0:
+            raise ValueError("language_balance_weight must lie in [0, 1]")
+        if (not isinstance(self.scheduled_sampling_rate, (int, float))
+                or isinstance(self.scheduled_sampling_rate, bool)
+                or not math.isfinite(self.scheduled_sampling_rate)
+                or not 0.0 <= self.scheduled_sampling_rate < 1.0):
+            raise ValueError("scheduled_sampling_rate must be finite and lie in [0, 1)")
         if not 0 <= self.ema_momentum <= 1 or not math.isfinite(self.grad_clip) or self.grad_clip <= 0:
             raise ValueError("invalid EMA momentum or gradient clip")
 
 
+def _scheduled_sampling_inputs(decoder_input, proposal_logits, pad_id: int, rate: float):
+    """Replace a sampled share of teacher-forced decoder inputs with one-pass predictions."""
+    if rate == 0.0 or decoder_input.shape[1] < 2:
+        return decoder_input
+    proposals = proposal_logits[:, :-1].argmax(dim=-1)
+    active = decoder_input[:, 1:] != pad_id
+    sampled = torch.rand(active.shape, device=decoder_input.device) < rate
+    use_prediction = active & sampled
+    mixed = decoder_input.clone()
+    mixed[:, 1:] = torch.where(use_prediction, proposals, decoder_input[:, 1:])
+    return mixed
+
+
+def _language_balanced_token_loss(per_token, token_mask, language_ids, edge_weights):
+    """Average per-example token CE within language, then equally across languages."""
+    token_counts = token_mask.sum(dim=1)
+    if (token_counts == 0).any():
+        raise ValueError("language-balanced token loss requires at least one target token per example")
+    per_example = (per_token * token_mask.to(per_token.dtype)).sum(dim=1) / token_counts
+    language_means = []
+    for language_id in torch.unique(language_ids, sorted=True):
+        selected = language_ids == language_id
+        weights = edge_weights[selected]
+        weight_sum = weights.sum()
+        if weight_sum <= 0:
+            raise ValueError("language-balanced token loss requires positive language weight")
+        language_means.append((per_example[selected] * weights).sum() / weight_sum)
+    if not language_means:
+        raise ValueError("language-balanced token loss requires a nonempty batch")
+    return torch.stack(language_means).mean(), edge_weights.sum()
+
+
 def compute_loss(model, batch: Batch, inventory: Inventory, objective: Objective):
     batch.validate(model.cfg, inventory)
-    logits, state, predicted = model(batch.source, batch.decoder_input, batch.action_ids, batch.language_ids)
+    decoder_input = batch.decoder_input
+    if objective.scheduled_sampling_rate and model.training:
+        with torch.no_grad():
+            proposal_logits, _, _ = model(batch.source, decoder_input, batch.action_ids, batch.language_ids)
+        decoder_input = _scheduled_sampling_inputs(
+            decoder_input, proposal_logits, model.cfg.pad_id, objective.scheduled_sampling_rate)
+    logits, state, predicted = model(batch.source, decoder_input, batch.action_ids, batch.language_ids)
     edge_weights = (batch.edge_weights if batch.edge_weights is not None
                     else torch.ones(len(batch.edges), dtype=logits.dtype, device=logits.device))
     per_token = F.cross_entropy(logits.transpose(1, 2), batch.labels,
@@ -144,6 +195,10 @@ def compute_loss(model, batch: Batch, inventory: Inventory, objective: Objective
     # Batch validation guarantees at least one label and positive edge weights.
     # A floor of one changes the mean for small, otherwise valid weights.
     token = (per_token * token_weights).sum() / token_count
+    language_balanced_token, language_balanced_example_count = _language_balanced_token_loss(
+        per_token, token_mask, batch.language_ids, edge_weights)
+    token_objective = ((1.0 - objective.language_balance_weight) * token
+                       + objective.language_balance_weight * language_balanced_token)
     copy_token = token.new_zeros(())
     copy_token_count = token.new_zeros(())
     if objective.source_copy_weight or objective.compute_source_copy_term:
@@ -196,8 +251,20 @@ def compute_loss(model, batch: Batch, inventory: Inventory, objective: Objective
                 path_targets.append(target[final_index])
             _, source_memory, source_valid = model.online.encode(
                 batch.source[first_index : first_index + 1])
+            path_decoder_input = batch.decoder_input[final_index : final_index + 1]
+            if objective.scheduled_sampling_rate and model.training:
+                with torch.no_grad():
+                    proposal_logits = model.decode(
+                        path_decoder_input, composed,
+                        batch.language_ids[final_index : final_index + 1],
+                        source_memory, source_valid,
+                        batch.source[first_index : first_index + 1],
+                    )
+                path_decoder_input = _scheduled_sampling_inputs(
+                    path_decoder_input, proposal_logits, model.cfg.pad_id,
+                    objective.scheduled_sampling_rate)
             composed_logits = model.decode(
-                batch.decoder_input[final_index : final_index + 1],
+                path_decoder_input,
                 composed,
                 batch.language_ids[final_index : final_index + 1],
                 source_memory,
@@ -225,7 +292,7 @@ def compute_loss(model, batch: Batch, inventory: Inventory, objective: Objective
                 [F.mse_loss(composed[p.left], composed[p.right]) for p in batch.path_pairs]
             ).mean()
     total = (
-        token
+        token_objective
         + objective.latent_objective_weight * objective.jepa_weight * jepa
         + objective.latent_objective_weight * objective.alignment_weight * alignment
         + objective.latent_objective_weight * objective.variance_weight * variance
@@ -246,6 +313,8 @@ def compute_loss(model, batch: Batch, inventory: Inventory, objective: Objective
     return total, {
         "loss": total,
         "token": token,
+        "language_balanced_token": language_balanced_token,
+        "language_balanced_example_count": float(language_balanced_example_count.detach()),
         "jepa": jepa,
         "alignment": alignment,
         "variance": variance,

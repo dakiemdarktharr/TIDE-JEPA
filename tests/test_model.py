@@ -98,6 +98,37 @@ class ModelTests(unittest.TestCase):
         scaled_gradient = torch.autograd.grad(scaled_loss, self.model.output.weight)[0]
         torch.testing.assert_close(original_gradient, scaled_gradient)
 
+    def test_language_balanced_token_loss_equalizes_language_means(self):
+        from tide_jepa.training import _language_balanced_token_loss
+
+        per_token = torch.tensor([[1.0, 3.0], [2.0, 4.0], [8.0, 12.0]])
+        token_mask = torch.ones_like(per_token, dtype=torch.bool)
+        language_ids = torch.tensor([0, 0, 1])
+        edge_weights = torch.tensor([1.0, 3.0, 1.0])
+        balanced, count = _language_balanced_token_loss(
+            per_token, token_mask, language_ids, edge_weights)
+        # Language 0 mean = (2*1 + 3*3)/4 = 2.75; language 1 mean = 10.
+        torch.testing.assert_close(balanced, torch.tensor((2.75 + 10.0) / 2))
+        torch.testing.assert_close(count, torch.tensor(5.0))
+
+    def test_language_balance_objective_blends_global_and_balanced_token_ce(self):
+        global_loss, global_metrics = compute_loss(
+            self.model, self.batch, self.inventory, Objective(mode="token_only"))
+        balanced_loss, balanced_metrics = compute_loss(
+            self.model, self.batch, self.inventory,
+            Objective(mode="token_only", language_balance_weight=1.0))
+        torch.testing.assert_close(global_loss, global_metrics["token"])
+        torch.testing.assert_close(balanced_loss, balanced_metrics["language_balanced_token"])
+        mid_loss, mid_metrics = compute_loss(
+            self.model, self.batch, self.inventory,
+            Objective(mode="token_only", language_balance_weight=0.25))
+        expected = 0.75 * mid_metrics["token"] + 0.25 * mid_metrics["language_balanced_token"]
+        torch.testing.assert_close(mid_loss, expected)
+        self.assertEqual(mid_metrics["language_balanced_example_count"], 2)
+        for invalid in (-0.01, 1.01, float("nan"), True, "0.5"):
+            with self.assertRaises((TypeError, ValueError)):
+                Objective(language_balance_weight=invalid)
+
     def test_source_copy_loss_is_optional_and_uses_aligned_target_denominator(self):
         mask = torch.zeros_like(self.batch.labels, dtype=torch.bool)
         mask[:, :2] = True

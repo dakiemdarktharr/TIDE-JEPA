@@ -14,7 +14,7 @@ from tide_jepa.phomt_intake import TRAIN_MEMBERS, _select_pairs
 from tide_jepa.data import dataset_fingerprint, read_jsonl
 from tide_jepa.pilot_seed import (FAMILIES_V43, FAMILIES_V44, FAMILIES_V45,
                                   FAMILIES_V46, FAMILIES_V47, FAMILIES_V48,
-                                  FAMILIES_V49, FAMILIES_V410, FAMILIES_V411, FAMILIES_V412, FAMILIES_V413, FAMILIES_V414, FAMILIES_V415, FAMILIES_V416, FAMILIES_V417, FAMILIES_V418, FAMILIES_V419, FAMILIES_V420, FAMILIES_V421, FAMILIES_V422, FAMILIES_V423, author_seed,
+                                  FAMILIES_V49, FAMILIES_V410, FAMILIES_V411, FAMILIES_V412, FAMILIES_V413, FAMILIES_V414, FAMILIES_V415, FAMILIES_V416, FAMILIES_V417, FAMILIES_V418, FAMILIES_V419, FAMILIES_V420, FAMILIES_V421, FAMILIES_V422, FAMILIES_V423, FAMILIES_V424, FAMILIES_V425, author_seed,
                                   author_seed_v4)
 from tide_jepa.schema import Action, Inventory
 
@@ -979,6 +979,99 @@ class SeedAuthoringTests(unittest.TestCase):
                 _semantic_frame_flags(row.target_text, row.language, frames[row.target_frame_id]))
                 for row in rows))
 
+    def test_v424_uses_fresh_balanced_factor_pool_and_supported_checker(self):
+        from collections import Counter
+        splits = [FAMILIES_V424[name] for name in ("train", "validation", "test")]
+        triples = [tuple(map(int, row[0].removeprefix("compose424_").split("_")))
+                   for split in splits for row in split]
+        self.assertEqual([len(split) for split in splits], [112, 40, 40])
+        self.assertEqual(len(set(triples)), 192)
+        train = [tuple(map(int, row[0].removeprefix("compose424_").split("_")))
+                 for row in splits[0]]
+        known_pairs = {(i, j, row[i], row[j])
+                       for row in train for i, j in ((0, 1), (0, 2), (1, 2))}
+        for split in splits[1:]:
+            for row in (tuple(map(int, item[0].removeprefix("compose424_").split("_")))
+                        for item in split):
+                self.assertTrue(all((i, j, row[i], row[j]) in known_pairs
+                                    for i, j in ((0, 1), (0, 2), (1, 2))))
+            rows = [tuple(map(int, item[0].removeprefix("compose424_").split("_")))
+                    for item in split]
+            for dimension in range(3):
+                counts = Counter(row[dimension] for row in rows)
+                self.assertLessEqual(max(counts.values()) - min(counts.values()), 1)
+        with tempfile.TemporaryDirectory() as temporary:
+            destination = Path(temporary) / "v4.24"
+            statement = author_seed_v4(destination, version="v4.24")
+            self.assertEqual(statement["records"], 15360)
+            self.assertIn("64-width/two-layer", statement["split_policy"])
+            self.assertFalse(statement["phomt_used"])
+            self.assertFalse(statement["human_validated"])
+            inventory_value = json.loads((destination / "inventory.draft.json").read_text(encoding="utf-8"))
+            inventory = Inventory(tuple(Action(**value) for value in inventory_value["actions"]), {
+                language: frozenset(Action(**value) for value in inventory_value["proposed_by_language"][language])
+                for language in ("en", "vi")})
+            rows = read_jsonl(destination / "corpus.draft.jsonl", inventory,
+                              languages=("en", "vi"), require_approved=False)
+            frames = json.loads((destination / "semantic_frames.draft.json").read_text(encoding="utf-8"))
+            from tide_jepa.pilot import _semantic_frame_flags
+            self.assertTrue(all((lambda flags: flags is not None and flags["action_fidelity"]
+                                 and flags["preservation"])(
+                _semantic_frame_flags(row.target_text, row.language, frames[row.target_frame_id]))
+                for row in rows))
+            now_negative_vi = [row for row in rows if row.language == "vi"
+                               and frames[row.target_frame_id]["time"] == "present"
+                               and frames[row.target_frame_id]["polarity"] == "negative"]
+            self.assertTrue(now_negative_vi)
+            self.assertTrue(all("đang không" in " ".join(row.target_text.split())
+                                and _semantic_frame_flags(row.target_text, row.language,
+                                                          frames[row.target_frame_id])["action_fidelity"]
+                                for row in now_negative_vi))
+
+    def test_v425_self_feeding_corpus_is_fresh_pairwise_covered_and_checkable(self):
+        from collections import Counter
+        splits = [FAMILIES_V425[name] for name in ("train", "validation", "test")]
+        triples = [tuple(map(int, row[0].removeprefix("compose425_").split("_")))
+                   for split in splits for row in split]
+        self.assertEqual([len(split) for split in splits], [112, 40, 40])
+        self.assertEqual(len(set(triples)), 192)
+        self.assertEqual({row[1] for split in splits for row in split},
+                         {"Bich Ngoc", "Phan Minh", "Thu Trang"})
+        train_pairs = {(i, j, row[i], row[j]) for row in triples[:112]
+                       for i, j in ((0, 1), (0, 2), (1, 2))}
+        for heldout in triples[112:]:
+            self.assertTrue(all((i, j, heldout[i], heldout[j]) in train_pairs
+                                for i, j in ((0, 1), (0, 2), (1, 2))))
+        for split in splits:
+            for dimension in range(3):
+                counts = Counter(row[dimension] for row in
+                                 (tuple(map(int, item[0].removeprefix("compose425_").split("_")))
+                                  for item in split))
+                self.assertLessEqual(max(counts.values()) - min(counts.values()), 1)
+        with tempfile.TemporaryDirectory() as temporary:
+            destination = Path(temporary) / "v4.25"
+            statement = author_seed_v4(destination, version="v4.25")
+            self.assertEqual(statement["records"], 15360)
+            self.assertIn("one-pass 0.2 self-feeding", statement["split_policy"])
+            self.assertIn("no matched-compute claim", statement["split_policy"])
+            inventory_value = json.loads((destination / "inventory.draft.json").read_text(encoding="utf-8"))
+            inventory = Inventory(tuple(Action(**value) for value in inventory_value["actions"]), {
+                language: frozenset(Action(**value) for value in inventory_value["proposed_by_language"][language])
+                for language in ("en", "vi")})
+            rows = read_jsonl(destination / "corpus.draft.jsonl", inventory,
+                              languages=("en", "vi"), require_approved=False)
+            frames = json.loads((destination / "semantic_frames.draft.json").read_text(encoding="utf-8"))
+            from tide_jepa.pilot import _semantic_frame_flags
+            self.assertTrue(all((lambda flags: flags is not None and flags["action_fidelity"]
+                                 and flags["preservation"])(
+                _semantic_frame_flags(row.target_text, row.language, frames[row.target_frame_id]))
+                for row in rows))
+            now_negative_vi = [row for row in rows if row.language == "vi"
+                               and frames[row.target_frame_id]["time"] == "present"
+                               and frames[row.target_frame_id]["polarity"] == "negative"]
+            self.assertTrue(all("đang không" in " ".join(row.target_text.split())
+                                for row in now_negative_vi))
+
     def test_unique_transition_weighting_rejects_unequal_representation_counts(self):
         from types import SimpleNamespace
         from tide_jepa.experiment import _transition_record_weights
@@ -1223,6 +1316,361 @@ class PilotWorkflowTests(unittest.TestCase):
         from tide_jepa.pilot import freeze_pilot
         self.write_reviews()
         return freeze_pilot(self.base, epochs=1, seeds=(17,))
+
+    def test_one_pass_self_feeding_replaces_only_sampled_active_decoder_slots(self):
+        import torch
+        from unittest.mock import patch
+        from tide_jepa.training import Objective, _scheduled_sampling_inputs
+        decoder_input = torch.tensor([[1, 4, 5, 0]])
+        proposal_logits = torch.zeros((1, 4, 8))
+        proposal_logits[0, 0, 6] = 1
+        proposal_logits[0, 1, 7] = 1
+        with patch("tide_jepa.training.torch.rand", return_value=torch.zeros((1, 3))):
+            mixed = _scheduled_sampling_inputs(decoder_input, proposal_logits, pad_id=0, rate=0.2)
+        self.assertEqual(mixed.tolist(), [[1, 6, 7, 0]])
+        self.assertEqual(decoder_input.tolist(), [[1, 4, 5, 0]])
+        for invalid in (-0.01, 1.0, float("nan"), True, "0.2"):
+            with self.assertRaises((TypeError, ValueError)):
+                Objective(scheduled_sampling_rate=invalid)
+
+    def test_v425_freeze_registers_the_scheduled_sampling_factorial(self):
+        from tide_jepa.pilot import REVIEWED_ARTIFACTS, _semantic_frame_flags, freeze_pilot
+        self.base = Path(self.temporary.name) / "v4.25"
+        self.statement = author_seed_v4(self.base, version="v4.25")
+        hashes = {name: hashlib.sha256((self.base / name).read_bytes()).hexdigest()
+                  for name in REVIEWED_ARTIFACTS}
+        for name in ("a", "b"):
+            (self.base / f"review-{name}.json").write_text(json.dumps({
+                "reviewer_id": f"synthetic-test-reviewer-{name}", "reviewer_type": "AI",
+                "decision": "approve", "draft_sha256": self.statement["draft_sha256"],
+                "rows_checked": self.statement["records"], "artifact_sha256": hashes,
+            }), encoding="utf-8")
+        (self.base / "adjudication.json").write_text(json.dumps({
+            "decision": "approve", "draft_sha256": self.statement["draft_sha256"],
+            "human_validated": False,
+        }), encoding="utf-8")
+        freeze_pilot(self.base, epochs=1, seeds=(17, 23, 41), model_width=64,
+                     model_heads=4, model_layers=2, condition_modes=("tide",),
+                     condition_scheduled_sampling_rates=(0.0, 0.2),
+                     checkpoint_selection_policy="fixed_final_epoch")
+        protocol = json.loads((self.base / "protocol.json").read_text())
+        configs = [json.loads((self.base / name).read_text()) for name in protocol["configs"]]
+        self.assertEqual(len(configs), 6)
+        self.assertEqual(protocol["primary_scheduled_sampling_rates"], [0.0, 0.2])
+        self.assertEqual({config["objective"]["scheduled_sampling_rate"] for config in configs},
+                         {0.0, 0.2})
+
+    def test_v426_low_dose_copy_corpus_and_factorial_are_fresh_and_bound(self):
+        from collections import Counter
+        from tide_jepa.pilot_seed import FAMILIES_V426
+        from tide_jepa.pilot import REVIEWED_ARTIFACTS, freeze_pilot
+
+        splits = [FAMILIES_V426[name] for name in ("train", "validation", "test")]
+        triples = [tuple(map(int, row[0].removeprefix("compose426_").split("_")))
+                   for split in splits for row in split]
+        self.assertEqual([len(split) for split in splits], [112, 40, 40])
+        self.assertEqual(len(set(triples)), 192)
+        self.assertEqual({row[1] for split in splits for row in split},
+                         {"Bao Chau", "Duc Anh", "Gia Han"})
+        train_pairs = {(i, j, row[i], row[j]) for row in triples[:112]
+                       for i, j in ((0, 1), (0, 2), (1, 2))}
+        self.assertTrue(all(all((i, j, heldout[i], heldout[j]) in train_pairs
+                                for i, j in ((0, 1), (0, 2), (1, 2)))
+                            for heldout in triples[112:]))
+        for split in splits:
+            for dimension in range(3):
+                counts = Counter(row[dimension] for row in
+                                 (tuple(map(int, item[0].removeprefix("compose426_").split("_")))
+                                  for item in split))
+                self.assertLessEqual(max(counts.values()) - min(counts.values()), 2)
+
+        self.base = Path(self.temporary.name) / "v4.26"
+        self.statement = author_seed_v4(self.base, version="v4.26")
+        self.assertEqual(self.statement["records"], 15360)
+        self.assertIn("low-dose source-copy supervision (0/0.25)", self.statement["split_policy"])
+        inventory_value = json.loads((self.base / "inventory.draft.json").read_text(encoding="utf-8"))
+        inventory = Inventory(tuple(Action(**value) for value in inventory_value["actions"]), {
+            language: frozenset(Action(**value) for value in inventory_value["proposed_by_language"][language])
+            for language in ("en", "vi")})
+        rows = read_jsonl(self.base / "corpus.draft.jsonl", inventory,
+                          languages=("en", "vi"), require_approved=False)
+        frames = json.loads((self.base / "semantic_frames.draft.json").read_text(encoding="utf-8"))
+        from tide_jepa.pilot import _semantic_frame_flags
+        for row in rows:
+            flags = _semantic_frame_flags(row.target_text, row.language, frames[row.target_frame_id])
+            self.assertIsNotNone(flags)
+            self.assertTrue(flags["action_fidelity"] and flags["preservation"])
+        hashes = {name: hashlib.sha256((self.base / name).read_bytes()).hexdigest()
+                  for name in REVIEWED_ARTIFACTS}
+        for name in ("a", "b"):
+            (self.base / f"review-{name}.json").write_text(json.dumps({
+                "reviewer_id": f"synthetic-test-reviewer-{name}", "reviewer_type": "AI",
+                "decision": "approve", "draft_sha256": self.statement["draft_sha256"],
+                "rows_checked": self.statement["records"], "artifact_sha256": hashes,
+            }), encoding="utf-8")
+        (self.base / "adjudication.json").write_text(json.dumps({
+            "decision": "approve", "draft_sha256": self.statement["draft_sha256"],
+            "human_validated": False,
+        }), encoding="utf-8")
+        freeze_pilot(self.base, epochs=1, seeds=(17, 23, 41), model_width=64,
+                     model_heads=4, model_layers=2, condition_modes=("tide",),
+                     condition_source_copy_weights=(0.0, 0.25), compute_source_copy_term=True,
+                     checkpoint_selection_policy="fixed_final_epoch")
+        protocol = json.loads((self.base / "protocol.json").read_text())
+        configs = [json.loads((self.base / name).read_text()) for name in protocol["configs"]]
+        self.assertEqual(len(configs), 6)
+        self.assertEqual(protocol["primary_source_copy_weights"], [0.0, 0.25])
+        self.assertTrue(all(config["objective"]["compute_source_copy_term"] for config in configs))
+        self.assertEqual({config["objective"].get("source_copy_weight", 0.0) for config in configs},
+                         {0.0, 0.25})
+        from tide_jepa.pilot import _registered_primary_configs
+        selected = _registered_primary_configs(protocol, [(name, json.loads((self.base / name).read_text()))
+                                                            for name in protocol["configs"]])
+        self.assertEqual(len(selected), 6)
+
+    def test_v427_language_balance_corpus_checker_and_factorial(self):
+        from tide_jepa.pilot_seed import FAMILIES_V427
+        from tide_jepa.pilot import REVIEWED_ARTIFACTS, _registered_primary_configs, _semantic_frame_flags, freeze_pilot
+
+        self.assertEqual([len(FAMILIES_V427[split]) for split in ("train", "validation", "test")],
+                         [112, 40, 40])
+        agent_ids = {int(row[0].removeprefix("compose427_").split("_")[0])
+                     for split in FAMILIES_V427.values() for row in split}
+        self.assertEqual(agent_ids, {62, 63, 64})
+        self.base = Path(self.temporary.name) / "v4.27"
+        self.statement = author_seed_v4(self.base, version="v4.27")
+        self.assertEqual(self.statement["records"], 15360)
+        self.assertIn("equal-language-balanced token CE", self.statement["split_policy"])
+        inventory_value = json.loads((self.base / "inventory.draft.json").read_text(encoding="utf-8"))
+        inventory = Inventory(tuple(Action(**value) for value in inventory_value["actions"]), {
+            language: frozenset(Action(**value) for value in inventory_value["proposed_by_language"][language])
+            for language in ("en", "vi")})
+        rows = read_jsonl(self.base / "corpus.draft.jsonl", inventory,
+                          languages=("en", "vi"), require_approved=False)
+        frames = json.loads((self.base / "semantic_frames.draft.json").read_text(encoding="utf-8"))
+        for row in rows:
+            flags = _semantic_frame_flags(row.target_text, row.language, frames[row.target_frame_id])
+            self.assertIsNotNone(flags)
+            self.assertTrue(flags["action_fidelity"] and flags["preservation"])
+        hashes = {name: hashlib.sha256((self.base / name).read_bytes()).hexdigest()
+                  for name in REVIEWED_ARTIFACTS}
+        for name in ("a", "b"):
+            (self.base / f"review-{name}.json").write_text(json.dumps({
+                "reviewer_id": f"synthetic-test-reviewer-{name}", "reviewer_type": "AI",
+                "decision": "approve", "draft_sha256": self.statement["draft_sha256"],
+                "rows_checked": self.statement["records"], "artifact_sha256": hashes,
+            }), encoding="utf-8")
+        (self.base / "adjudication.json").write_text(json.dumps({
+            "decision": "approve", "draft_sha256": self.statement["draft_sha256"],
+            "human_validated": False,
+        }), encoding="utf-8")
+        freeze_pilot(self.base, epochs=1, seeds=(17, 23, 41), model_width=64,
+                     model_heads=4, model_layers=2, condition_modes=("tide",),
+                     condition_source_copy_weights=(0.0,),
+                     condition_language_balance_weights=(0.0, 1.0),
+                     checkpoint_selection_policy="fixed_final_epoch")
+        protocol = json.loads((self.base / "protocol.json").read_text())
+        named_configs = [(name, json.loads((self.base / name).read_text()))
+                         for name in protocol["configs"]]
+        self.assertEqual(len(named_configs), 6)
+        self.assertEqual(protocol["primary_language_balance_weights"], [0.0, 1.0])
+        self.assertEqual({config["objective"].get("language_balance_weight", 0.0)
+                          for _, config in named_configs}, {0.0, 1.0})
+        self.assertEqual(len(_registered_primary_configs(protocol, named_configs)), 6)
+
+    def test_v428_freeze_binds_train_validation_only_reviews(self):
+        from tide_jepa.pilot_seed import FAMILIES_V428
+        from tide_jepa.pilot import REVIEWED_ARTIFACTS, _semantic_frame_flags, freeze_pilot
+
+        self.assertEqual([len(FAMILIES_V428[split]) for split in ("train", "validation", "test")],
+                         [112, 40, 40])
+        self.assertTrue(all(row[0].startswith("compose428_")
+                            for split in FAMILIES_V428.values() for row in split))
+        self.assertEqual({int(row[0].removeprefix("compose428_").split("_")[0])
+                          for split in FAMILIES_V428.values() for row in split}, {65, 66, 67})
+        self.base = Path(self.temporary.name) / "v4.28"
+        self.statement = author_seed_v4(self.base, version="v4.28")
+        self.assertEqual(self.statement["records"], 15360)
+        self.assertEqual(self.statement["review_scope"], "train-validation-only")
+        self.assertEqual(self.statement["reviewed_records"], 12160)
+        inventory_value = json.loads((self.base / "inventory.draft.json").read_text(encoding="utf-8"))
+        inventory = Inventory(tuple(Action(**value) for value in inventory_value["actions"]), {
+            language: frozenset(Action(**value) for value in inventory_value["proposed_by_language"][language])
+            for language in ("en", "vi")})
+        rows = read_jsonl(self.base / "corpus.draft.jsonl", inventory,
+                          languages=("en", "vi"), require_approved=False)
+        frames = json.loads((self.base / "semantic_frames.draft.json").read_text(encoding="utf-8"))
+        groups = json.loads((self.base / "groups.json").read_text(encoding="utf-8"))
+        reviewed = [row for row in rows if groups[row.split_group_id] != "test"]
+        self.assertEqual(len(reviewed), self.statement["reviewed_records"])
+        for row in reviewed:
+            flags = _semantic_frame_flags(row.target_text, row.language, frames[row.target_frame_id])
+            self.assertIsNotNone(flags)
+            self.assertTrue(flags["action_fidelity"] and flags["preservation"])
+        hashes = {name: hashlib.sha256((self.base / name).read_bytes()).hexdigest()
+                  for name in REVIEWED_ARTIFACTS}
+        reviews = {}
+        for name in ("a", "b"):
+            reviews[name] = {
+                "reviewer_id": f"synthetic-test-reviewer-{name}", "reviewer_type": "AI",
+                "decision": "approve", "draft_sha256": self.statement["draft_sha256"],
+                "rows_checked": self.statement["reviewed_records"], "artifact_sha256": hashes,
+            }
+            (self.base / f"review-{name}.json").write_text(json.dumps(reviews[name]), encoding="utf-8")
+        invalid_scope_review = dict(reviews["a"], rows_checked=self.statement["records"])
+        (self.base / "review-a.json").write_text(json.dumps(invalid_scope_review), encoding="utf-8")
+        with self.assertRaisesRegex(ValueError, "review missing"):
+            freeze_pilot(self.base, epochs=1, seeds=(17, 23, 41), model_width=64,
+                         model_heads=4, model_layers=2, condition_modes=("tide",),
+                         condition_source_copy_weights=(0.0,),
+                         condition_language_balance_weights=(0.0, 1.0),
+                         checkpoint_selection_policy="fixed_final_epoch")
+        (self.base / "review-a.json").write_text(json.dumps(reviews["a"]), encoding="utf-8")
+        (self.base / "adjudication.json").write_text(json.dumps({
+            "decision": "approve", "draft_sha256": self.statement["draft_sha256"],
+            "human_validated": False,
+        }), encoding="utf-8")
+        freeze_pilot(self.base, epochs=1, seeds=(17, 23, 41), model_width=64,
+                     model_heads=4, model_layers=2, condition_modes=("tide",),
+                     condition_source_copy_weights=(0.0,),
+                     condition_language_balance_weights=(0.0, 1.0),
+                     checkpoint_selection_policy="fixed_final_epoch")
+        protocol = json.loads((self.base / "protocol.json").read_text())
+        self.assertEqual(protocol["review_scope"], "train-validation-only")
+        self.assertEqual(protocol["reviewed_records"], 12160)
+        self.assertEqual(protocol["primary_language_balance_weights"], [0.0, 1.0])
+        self.assertEqual(len(protocol["configs"]), 6)
+
+    def test_v429_generates_scoped_review_bundle_and_freeze_binds_it(self):
+        from tide_jepa.pilot_seed import FAMILIES_V429
+        from tide_jepa.pilot import REVIEWED_ARTIFACTS, _semantic_frame_flags, freeze_pilot
+
+        self.assertEqual([len(FAMILIES_V429[split]) for split in ("train", "validation", "test")],
+                         [112, 40, 40])
+        self.assertEqual({int(row[0].removeprefix("compose429_").split("_")[0])
+                          for split in FAMILIES_V429.values() for row in split}, {68, 69, 70})
+        self.base = Path(self.temporary.name) / "v4.29"
+        self.statement = author_seed_v4(self.base, version="v4.29")
+        self.assertEqual(self.statement["records"], 15360)
+        self.assertEqual(self.statement["reviewed_records"], 12160)
+        self.assertEqual(self.statement["action_frame_mapping"]["TIME"],
+                         {"NOW": "target frame time is present", "PAST": "target frame time is past"})
+        self.assertIn("place marker only", self.statement["context_checker_scope"])
+        inventory_value = json.loads((self.base / "inventory.draft.json").read_text(encoding="utf-8"))
+        inventory = Inventory(tuple(Action(**value) for value in inventory_value["actions"]), {
+            language: frozenset(Action(**value) for value in inventory_value["proposed_by_language"][language])
+            for language in ("en", "vi")})
+        draft_rows = read_jsonl(self.base / "corpus.draft.jsonl", inventory,
+                                languages=("en", "vi"), require_approved=False)
+        draft_frames = json.loads((self.base / "semantic_frames.draft.json").read_text(encoding="utf-8"))
+        sample = next(row for row in draft_rows if row.language == "en")
+        sample_frame = draft_frames[sample.target_frame_id]
+        flags = _semantic_frame_flags(sample.target_text, sample.language, sample_frame)
+        without_place = ""
+        omitted_context = _semantic_frame_flags(without_place, sample.language, sample_frame)
+        self.assertTrue(flags["context_preserved"])
+        self.assertFalse(omitted_context["context_preserved"])
+        self.assertIn("only as the declared language-specific place marker", flags["context_checker_scope"])
+        bundle = self.base / "review_bundle"
+        manifest = json.loads((bundle / "manifest.json").read_text())
+        bundle_statement = json.loads((bundle / "statement.json").read_text())
+        self.assertEqual(bundle_statement["action_frame_mapping"], self.statement["action_frame_mapping"])
+        self.assertIn("Null path fields are intentional", bundle_statement["standalone_records"])
+        self.assertIn("place marker only", bundle_statement["context_checker_scope"])
+        self.assertEqual(manifest["review_scope"], "train-validation-only")
+        self.assertEqual(manifest["reviewed_records"], 12160)
+        scoped_groups = json.loads((bundle / "groups.json").read_text())
+        self.assertNotIn("test", scoped_groups.values())
+        scoped_rows = [json.loads(line) for line in (bundle / "records.jsonl").read_text().splitlines()]
+        self.assertEqual(len(scoped_rows), 12160)
+        self.assertTrue(all(row["split_group_id"] in scoped_groups for row in scoped_rows))
+        bundle_sha = hashlib.sha256((bundle / "manifest.json").read_bytes()).hexdigest()
+        self.assertEqual(self.statement["review_bundle_sha256"], bundle_sha)
+        hashes = {name: hashlib.sha256((self.base / name).read_bytes()).hexdigest()
+                  for name in REVIEWED_ARTIFACTS}
+        for name in ("a", "b"):
+            (self.base / f"review-{name}.json").write_text(json.dumps({
+                "reviewer_id": f"synthetic-test-reviewer-{name}", "reviewer_type": "AI",
+                "decision": "approve", "draft_sha256": self.statement["draft_sha256"],
+                "rows_checked": 12160, "artifact_sha256": hashes,
+                "review_bundle_sha256": bundle_sha,
+            }), encoding="utf-8")
+        (self.base / "adjudication.json").write_text(json.dumps({
+            "decision": "approve", "draft_sha256": self.statement["draft_sha256"],
+            "human_validated": False,
+        }), encoding="utf-8")
+        freeze_pilot(self.base, epochs=1, seeds=(17, 23, 41), model_width=64,
+                     model_heads=4, model_layers=2, condition_modes=("tide",),
+                     condition_source_copy_weights=(0.0,),
+                     condition_language_balance_weights=(0.0, 1.0),
+                     checkpoint_selection_policy="fixed_final_epoch")
+        protocol = json.loads((self.base / "protocol.json").read_text())
+        self.assertEqual(protocol["review_scope"], "train-validation-only")
+        self.assertEqual(protocol["review_bundle_sha256"], bundle_sha)
+
+    def test_v430_generates_fresh_pointer_study_bundle_and_freezes_decoder_factor(self):
+        from tide_jepa.pilot import REVIEWED_ARTIFACTS, freeze_pilot
+        from tide_jepa.pilot_seed import FAMILIES_V430
+
+        self.assertEqual([len(FAMILIES_V430[split]) for split in ("train", "validation", "test")],
+                         [112, 40, 40])
+        self.assertEqual({int(row[0].removeprefix("compose430_").split("_")[0])
+                          for split in FAMILIES_V430.values() for row in split}, {71, 72, 73})
+        self.base = Path(self.temporary.name) / "v4.30"
+        self.statement = author_seed_v4(self.base, version="v4.30")
+        self.assertEqual(self.statement["reviewed_records"], 12160)
+        self.assertIn("source-pointer decoder comparison", self.statement["split_policy"])
+        bundle = self.base / "review_bundle"
+        bundle_manifest = json.loads((bundle / "manifest.json").read_text())
+        self.assertEqual(bundle_manifest["review_scope"], "train-validation-only")
+        self.assertNotIn("test", json.loads((bundle / "groups.json").read_text()).values())
+        bundle_sha = hashlib.sha256((bundle / "manifest.json").read_bytes()).hexdigest()
+        hashes = {name: hashlib.sha256((self.base / name).read_bytes()).hexdigest()
+                  for name in REVIEWED_ARTIFACTS}
+        for label in ("a", "b"):
+            (self.base / f"review-{label}.json").write_text(json.dumps({
+                "reviewer_id": f"synthetic-test-reviewer-{label}", "reviewer_type": "AI",
+                "decision": "approve", "draft_sha256": self.statement["draft_sha256"],
+                "rows_checked": 12160, "artifact_sha256": hashes,
+                "review_bundle_sha256": bundle_sha,
+            }), encoding="utf-8")
+        (self.base / "adjudication.json").write_text(json.dumps({
+            "decision": "approve", "draft_sha256": self.statement["draft_sha256"],
+            "human_validated": False,
+        }), encoding="utf-8")
+        freeze_pilot(self.base, epochs=1, seeds=(17, 23, 41), model_width=64,
+                     model_heads=4, model_layers=2, condition_modes=("tide",),
+                     condition_source_copy_weights=(0.0,),
+                     condition_source_pointer_decoder_modes=("vocabulary", "source_pointer"),
+                     checkpoint_selection_policy="fixed_final_epoch")
+        protocol = json.loads((self.base / "protocol.json").read_text())
+        configs = [json.loads((self.base / name).read_text()) for name in protocol["configs"]]
+        self.assertEqual(protocol["review_scope"], "train-validation-only")
+        self.assertEqual(protocol["review_bundle_sha256"], bundle_sha)
+        self.assertEqual(protocol["primary_source_pointer_decoder_modes"], ["vocabulary", "source_pointer"])
+        self.assertEqual(len(configs), 6)
+        self.assertEqual({config["model"]["source_pointer_decoder"] for config in configs}, {False, True})
+
+    def test_self_feeding_training_smoke_writes_identified_checkpoint(self):
+        from tide_jepa.experiment import run_experiment
+        self.freeze()
+        path = self.base / "tide-seed-17.json"
+        config = json.loads(path.read_text())
+        config["objective"]["scheduled_sampling_rate"] = 0.2
+        config["output_dir"] = str(self.base / "self-feeding-smoke")
+        path.write_text(json.dumps(config), encoding="utf-8")
+        protocol_path = self.base / "protocol.json"
+        protocol = json.loads(protocol_path.read_text())
+        protocol["config_files_sha256"][path.name] = hashlib.sha256(path.read_bytes()).hexdigest()
+        protocol_path.write_text(json.dumps(protocol), encoding="utf-8")
+        with redirect_stdout(io.StringIO()):
+            result = run_experiment(path, device="cpu")
+        self.assertFalse(result["test_evaluated"])
+        checkpoint = self.base / "self-feeding-smoke" / "latest.pt"
+        self.assertTrue(checkpoint.is_file())
+        self.assertTrue(__import__("torch").load(checkpoint, weights_only=True)["model"])
+        resolved = json.loads((self.base / "self-feeding-smoke" / "resolved_run.json").read_text())
+        self.assertEqual(resolved["objective"]["scheduled_sampling_rate"], 0.2)
 
     def test_freeze_registers_transition_balance_as_a_crossed_condition(self):
         from tide_jepa.pilot import freeze_pilot
@@ -1507,6 +1955,13 @@ class PilotWorkflowTests(unittest.TestCase):
         self.assertFalse(result["test_evaluated"])
         self.assertEqual(resumed["steps"], result["steps"])
         self.assertEqual(resumed["best_validation_loss"], result["best_validation_loss"])
+        import csv
+        with (output / "metrics.csv").open("r", encoding="utf-8", newline="") as stream:
+            metric_rows = list(csv.reader(stream))
+        with (output / "metrics.csv").open("a", encoding="utf-8", newline="") as stream:
+            csv.writer(stream).writerow(metric_rows[-1])
+        with self.assertRaisesRegex(ValueError, "duplicate or missing rows"):
+            run_experiment(path, resume=True, device="cpu")
         generator = OfflineGenerator(path, output / "best.pt", device="cpu")
         response = generator.generate({"source": "Original test source.", "source_language": "en", "target_language": "en", "actions": [{"kind": "TIME", "value": "PAST"}], "max_new_tokens": 2})
         self.assertIn("valid_utf8", response)

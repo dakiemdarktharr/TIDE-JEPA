@@ -102,23 +102,33 @@ def _write_csv_atomic(path: Path, header: tuple[str, ...], rows) -> None:
 
 def _reconcile_metrics_log(path: Path, checkpoint_epoch: int) -> None:
     """Drop durable metric rows for epochs whose checkpoint was not published."""
-    header = ("epoch", "split", "loss", "token", "jepa", "alignment", "variance", "path_jepa",
+    header = ("epoch", "split", "loss", "token", "language_balanced_token", "jepa", "alignment", "variance", "path_jepa",
               "path_token", "path_alignment", "copy_token", "token_count", "copy_token_count", "edge_count", "alignment_count", "path_count",
-              "path_alignment_count", "examples", "source_tokens", "target_tokens", "updates",
+              "path_alignment_count", "language_balanced_example_count", "examples", "source_tokens", "target_tokens", "updates",
               "seconds", "examples_per_second", "peak_vram_bytes")
     with path.open("r", encoding="utf-8", newline="") as stream:
         reader = csv.reader(stream)
         current_header = next(reader, None)
-        rows = [row for row in reader if row and row[0].isdigit() and int(row[0]) <= checkpoint_epoch]
+        raw_rows = list(reader)
     if tuple(current_header or ()) != header:
         raise ValueError("metrics log schema differs from the checkpoint run")
+    rows = []
     counts = {}
-    for row in rows:
-        if len(row) != len(header):
+    for row in raw_rows:
+        if not row:
+            continue
+        if len(row) != len(header) or not row[0].isdigit() or row[1] not in {"train", "validation"}:
             raise ValueError("metrics log has a malformed committed row")
-        counts.setdefault(int(row[0]), set()).add(row[1])
-    if any(counts.get(epoch) != {"train", "validation"} for epoch in range(1, checkpoint_epoch + 1)):
-        raise ValueError("metrics log is incomplete for a published checkpoint epoch")
+        epoch = int(row[0])
+        if epoch < 1:
+            raise ValueError("metrics log has an invalid committed epoch")
+        if epoch <= checkpoint_epoch:
+            split_counts = counts.setdefault(epoch, {})
+            split_counts[row[1]] = split_counts.get(row[1], 0) + 1
+            rows.append(row)
+    if any(counts.get(epoch) != {"train": 1, "validation": 1}
+           for epoch in range(1, checkpoint_epoch + 1)):
+        raise ValueError("metrics log has duplicate or missing rows for a published checkpoint epoch")
     _write_csv_atomic(path, header, rows)
 
 
@@ -232,8 +242,8 @@ def _build_experiment_batch(rows, cfg, inventory, device, edge_alignment, path_a
 
 def _evaluate(model, records, cfg, inventory, objective, batch_size, device, edge_alignment, path_alignment):
     model.eval()
-    totals, metric_denoms = {}, {name: 0 for name in ("token", "copy_token", "jepa", "alignment", "variance", "path_jepa", "path_token", "path_alignment", "latent_std")}
-    denominators = {key: 0 for key in ("token_count", "copy_token_count", "edge_count", "alignment_count", "path_count", "path_alignment_count")}
+    totals, metric_denoms = {}, {name: 0 for name in ("token", "language_balanced_token", "copy_token", "jepa", "alignment", "variance", "path_jepa", "path_token", "path_alignment", "latent_std")}
+    denominators = {key: 0 for key in ("token_count", "copy_token_count", "edge_count", "alignment_count", "path_count", "path_alignment_count", "language_balanced_example_count")}
     examples = 0
     with torch.no_grad():
         for rows in _batch_records(records, batch_size):
@@ -241,8 +251,10 @@ def _evaluate(model, records, cfg, inventory, objective, batch_size, device, edg
             _, metrics = compute_loss(model, batch, inventory, objective)
             examples += len(rows)
             for key in denominators:
-                denominators[key] += metrics[key]
-            units = {"token": metrics["token_count"], "copy_token": metrics["copy_token_count"],
+                denominators[key] += metrics.get(key, 0.0)
+            units = {"token": metrics["token_count"],
+                     "language_balanced_token": metrics.get("language_balanced_example_count", 0.0),
+                     "copy_token": metrics["copy_token_count"],
                      "jepa": metrics["edge_count"],
                      "alignment": metrics["alignment_count"], "variance": metrics["edge_count"],
                      "path_jepa": metrics["path_count"], "path_token": metrics["path_count"],
@@ -257,7 +269,9 @@ def _evaluate(model, records, cfg, inventory, objective, batch_size, device, edg
               for name, count in metric_denoms.items()}
     result.update(denominators)
     result["examples"] = examples
-    result["loss"] = (result.get("token", 0.0) + objective.source_copy_weight * result.get("copy_token", 0.0)
+    result["loss"] = ((1.0 - objective.language_balance_weight) * result.get("token", 0.0)
+                      + objective.language_balance_weight * result.get("language_balanced_token", 0.0)
+                      + objective.source_copy_weight * result.get("copy_token", 0.0)
                       + objective.latent_objective_weight * objective.jepa_weight * result.get("jepa", 0.0)
                       + objective.latent_objective_weight * objective.alignment_weight * result.get("alignment", 0.0)
                       + objective.latent_objective_weight * objective.variance_weight * result.get("variance", 0.0)
@@ -462,9 +476,9 @@ def run_experiment(
             _save_checkpoint(best_path, state)
 
     log_path = output_dir / "metrics.csv"
-    header = ("epoch", "split", "loss", "token", "jepa", "alignment", "variance", "path_jepa",
+    header = ("epoch", "split", "loss", "token", "language_balanced_token", "jepa", "alignment", "variance", "path_jepa",
               "path_token", "path_alignment", "copy_token", "token_count", "copy_token_count", "edge_count", "alignment_count", "path_count",
-              "path_alignment_count", "examples", "source_tokens", "target_tokens", "updates",
+              "path_alignment_count", "language_balanced_example_count", "examples", "source_tokens", "target_tokens", "updates",
               "seconds", "examples_per_second", "peak_vram_bytes")
     if not resume:
         _write_csv_atomic(log_path, header, [])
@@ -480,7 +494,7 @@ def run_experiment(
         started = time.perf_counter()
         model.train()
         totals = {}
-        metric_counts = {name: 0 for name in ("token", "copy_token", "jepa", "alignment", "variance", "path_jepa", "path_token", "path_alignment", "latent_std")}
+        metric_counts = {name: 0 for name in ("token", "language_balanced_token", "copy_token", "jepa", "alignment", "variance", "path_jepa", "path_token", "path_alignment", "latent_std")}
         seen = 0
         updates_before = trainer.steps
         for rows in _batch_records(split_records["train"], batch_size, shuffle_seed=seed + epoch):
@@ -489,7 +503,9 @@ def run_experiment(
             metrics = trainer.step(batch)
             weight = len(rows)
             seen += weight
-            units = {"token": metrics["token_count"], "copy_token": metrics["copy_token_count"],
+            units = {"token": metrics["token_count"],
+                     "language_balanced_token": metrics.get("language_balanced_example_count", 0.0),
+                     "copy_token": metrics["copy_token_count"],
                      "jepa": metrics["edge_count"],
                      "alignment": metrics["alignment_count"], "variance": metrics["edge_count"],
                      "path_jepa": metrics["path_count"], "path_token": metrics["path_count"],
@@ -501,7 +517,9 @@ def run_experiment(
         seconds = time.perf_counter() - started
         train_metrics = {name: totals.get(name, 0.0) / count if count else 0.0
                          for name, count in metric_counts.items()}
-        train_metrics["loss"] = (train_metrics["token"] + objective.source_copy_weight * train_metrics["copy_token"]
+        train_metrics["loss"] = ((1.0 - objective.language_balance_weight) * train_metrics["token"]
+                                  + objective.language_balance_weight * train_metrics["language_balanced_token"]
+                                  + objective.source_copy_weight * train_metrics["copy_token"]
                                   + objective.latent_objective_weight * objective.jepa_weight * train_metrics["jepa"]
                                   + objective.latent_objective_weight * objective.alignment_weight * train_metrics["alignment"]
                                   + objective.latent_objective_weight * objective.variance_weight * train_metrics["variance"]
@@ -509,6 +527,7 @@ def run_experiment(
                                   + objective.path_token_weight * train_metrics["path_token"]
                                   + objective.latent_objective_weight * objective.path_alignment_weight * train_metrics["path_alignment"])
         train_metrics.update({"token_count": metric_counts["token"], "copy_token_count": metric_counts["copy_token"],
+                              "language_balanced_example_count": metric_counts["language_balanced_token"],
                               "edge_count": metric_counts["jepa"],
                               "alignment_count": metric_counts["alignment"],
                               "path_count": metric_counts["path_token"],
@@ -527,13 +546,14 @@ def run_experiment(
                 ("validation", validation_metrics, len(split_records["validation"]), 0.0),
             ):
                 csv_rows.append(row_base + [split_name] + [metrics.get(key, 0.0) for key in (
-                    "loss", "token", "jepa", "alignment", "variance", "path_jepa", "path_token", "path_alignment", "copy_token"
-                )] + [metrics.get(key, 0) for key in ("token_count", "copy_token_count", "edge_count", "alignment_count", "path_count", "path_alignment_count")]
+                    "loss", "token", "language_balanced_token", "jepa", "alignment", "variance", "path_jepa", "path_token", "path_alignment", "copy_token"
+                )] + [metrics.get(key, 0) for key in ("token_count", "copy_token_count", "edge_count", "alignment_count", "path_count", "path_alignment_count", "language_balanced_example_count")]
                     + [count, metrics.get("source_tokens", 0), metrics.get("target_tokens", 0),
                       trainer.steps - updates_before if split_name == "train" else 0, elapsed,
                       count / elapsed if elapsed else 0.0, peak_vram_bytes if split_name == "train" else 0])
         _append_metrics_rows(log_path, csv_rows)
-        selection_loss = (validation_metrics["token"]
+        selection_loss = ((1.0 - objective.language_balance_weight) * validation_metrics["token"]
+                          + objective.language_balance_weight * validation_metrics["language_balanced_token"]
                           + objective.path_token_weight * validation_metrics["path_token"]
                           + objective.source_copy_weight * validation_metrics["copy_token"])
         # A fixed-final policy updates best.pt on every epoch. It is therefore

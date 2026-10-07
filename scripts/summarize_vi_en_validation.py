@@ -17,7 +17,8 @@ from tide_jepa.pilot import _registered_primary_configs
 SCORE_FIELDS = (
     "examples", "accepted_reference_matches", "valid_unicode", "terminated_eos", "nonempty",
     "action_fidelity_known", "action_fidelity_pass", "preservation_known",
-    "preservation_pass", "checker_coverage", "edit_distance", "reference_characters",
+    "preservation_pass", "context_preservation_known", "context_preservation_pass",
+    "checker_coverage", "edit_distance", "reference_characters",
 )
 
 
@@ -96,7 +97,9 @@ def summarize_validation(directory, destination):
         results.append({
             "config": name,
             "mode": config["objective"]["mode"],
+            "scheduled_sampling_rate": config["objective"].get("scheduled_sampling_rate", 0.0),
             "source_copy_weight": config["objective"].get("source_copy_weight", 0.0),
+            "language_balance_weight": config["objective"].get("language_balance_weight", 0.0),
             "latent_objective_weight": (config["objective"].get("latent_objective_weight", 1.0)
                                         if config["objective"]["mode"] == "tide" else None),
             "transition_balance": config.get("training", {}).get("transition_balance", "row_uniform"),
@@ -105,6 +108,10 @@ def summarize_validation(directory, destination):
             "generation": generation,
             "last_val_token_ce": float(final_validation["token"]),
             "last_train_token_ce": float(train_rows[-1]["token"]),
+            "last_val_language_balanced_ce": (float(final_validation["language_balanced_token"])
+                                               if final_validation.get("language_balanced_token") else None),
+            "last_train_language_balanced_ce": (float(train_rows[-1]["language_balanced_token"])
+                                                 if train_rows[-1].get("language_balanced_token") else None),
             "last_val_path_token_ce": float(final_validation["path_token"]),
             "train_wall_seconds": sum(float(row["seconds"]) for row in train_rows),
             "mean_examples_per_second": statistics.mean(float(row["examples_per_second"]) for row in train_rows),
@@ -138,13 +145,18 @@ def summarize_validation(directory, destination):
         f"## Frozen protocol", "",
         f"The corpus has {statement['records']} records and {statement['event_families']} event combinations. Split groups: {group_counts['train']}/{group_counts['validation']}/{group_counts['test']}; records: {record_counts['train']}/{record_counts['validation']}/{record_counts['test']} (train/validation/release holdout). Data split policy: {statement['split_policy']}."
         + (f" Frozen release-holdout scope: {protocol['release_holdout_scope']}" if protocol.get("release_holdout_scope") else "")
-        + (f" Transition weighting: {statement['transition_weighting_note']}" if statement.get("transition_weighting_note") else ""), "",
+        + (f" Transition weighting: {statement['transition_weighting_note']}" if statement.get("transition_weighting_note") else "")
+        + (f" Language-balance intervention scope: {protocol['language_balance_scope']}" if protocol.get("language_balance_scope") else ""), "",
         "Objective conditions: " + "; ".join(
-            f"{mode} with source-copy weight {weight:g}" +
+            f"{mode} with one-pass self-feeding rate {sampling_rate:g} and source-copy weight {weight:g}" +
             (f" and TIDE latent-objective multiplier {latent:g}" if latent is not None else "") +
-            f"; transition balance `{balance}`; decoder `{decoder}`"
-            for mode, weight, latent, balance, decoder in sorted({(item["mode"], item["source_copy_weight"], item["latent_objective_weight"], item["transition_balance"], item["decoder"])
-                                                for item in results}, key=lambda value: (value[0], value[1], value[2] or 0.0, value[3], value[4])))
+            f"; language-balance weight {language_balance_weight:g}; transition balance `{balance}`; decoder `{decoder}`"
+            for mode, sampling_rate, weight, latent, balance, decoder, language_balance_weight in sorted(
+                {(item["mode"], item["scheduled_sampling_rate"], item["source_copy_weight"],
+                  item["latent_objective_weight"], item["transition_balance"], item["decoder"],
+                  item["language_balance_weight"])
+                 for item in results},
+                key=lambda value: (value[0], value[1], value[2], value[3] or 0.0, value[4], value[5], value[6])))
         + f". Seeds {', '.join(map(str, seeds))}; {protocol['epochs']} epochs and {results[0]['updates']} updates/config; width {protocol['model']['width']}, {protocol['model']['heads']} heads, {protocol['model']['layers']} layers. "
         + (f"The preregistered final epoch was evaluated (`{protocol['checkpoint_selection_policy']}`); validation loss did not select the checkpoint. "
            if protocol.get("checkpoint_selection_policy") == "fixed_final_epoch" else
@@ -164,28 +176,32 @@ def summarize_validation(directory, destination):
         ("Semantic quality gates are not interpretable because one or more buckets lack complete checker coverage. The gate fails closed and the release holdout remains sealed; `0/0` is an unscored denominator, not a 0% model score. See checker-coverage counts below."
          if not checker_coverage_complete else "Semantic checker coverage is complete across all primary buckets."), "",
         "The release holdout was not evaluated and remains sealed.", "",
-        "| Mode | Source-copy weight | TIDE aux multiplier | Edge balance | Decoder | Seed | Train token CE | Val token CE | Val path token CE | Updates | Training wall seconds | Mean examples/sec | Gate |", "|---|---:|---:|---|---|---:|---:|---:|---:|---:|---:|---:|---|"
-    ]
+        "| Mode | Self-feeding rate | Source-copy weight | Language-balance weight | TIDE aux multiplier | Edge balance | Decoder | Seed | Train token CE | Val token CE | Train balanced CE | Val balanced CE | Val path token CE | Updates | Training wall seconds | Mean examples/sec | Gate |", "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|"]
     for item in results:
         gate = item["generation"]["quality_gate"]["status"]
         latent = "—" if item["latent_objective_weight"] is None else f"{item['latent_objective_weight']:g}"
-        lines.append(f"| {item['mode']} | {item['source_copy_weight']:g} | {latent} | {item['transition_balance']} | {item['decoder']} | {item['seed']} | {item['last_train_token_ce']:.4f} | {item['last_val_token_ce']:.4f} | {item['last_val_path_token_ce']:.4f} | {item['updates']} | {item['train_wall_seconds']:.1f} | {item['mean_examples_per_second']:.1f} | {gate} |")
+        train_balanced = "—" if item["last_train_language_balanced_ce"] is None else f"{item['last_train_language_balanced_ce']:.4f}"
+        val_balanced = "—" if item["last_val_language_balanced_ce"] is None else f"{item['last_val_language_balanced_ce']:.4f}"
+        lines.append(f"| {item['mode']} | {item['scheduled_sampling_rate']:g} | {item['source_copy_weight']:g} | {item['language_balance_weight']:g} | {latent} | {item['transition_balance']} | {item['decoder']} | {item['seed']} | {item['last_train_token_ce']:.4f} | {item['last_val_token_ce']:.4f} | {train_balanced} | {val_balanced} | {item['last_val_path_token_ce']:.4f} | {item['updates']} | {item['train_wall_seconds']:.1f} | {item['mean_examples_per_second']:.1f} | {gate} |")
 
     lines += ["", "## Validation generation by condition and bucket", "",
-              "Action fidelity and preservation are pooled across seeds within each condition and bucket; thresholds are still checked for every primary condition/seed/bucket. Exact-reference match and CER are synthetic-reference metrics, not human naturalness.", "",
-              "| Mode | Source-copy weight | TIDE aux multiplier | Edge balance | Decoder | Bucket | Checker coverage | Action fidelity | Preservation | Accepted references | CER | Nonempty | Unicode | EOS |", "|---|---:|---:|---|---|---|---:|---:|---:|---:|---:|---:|---:|---:|"]
-    conditions = sorted({(item["mode"], item["source_copy_weight"], item["latent_objective_weight"], item["transition_balance"], item["decoder"])
-                         for item in results}, key=lambda value: (value[0], value[1], value[2] or 0.0, value[3], value[4]))
-    for mode, copy_weight, latent_weight, transition_balance, decoder in conditions:
+              "Action fidelity, preservation, and context-marker counts are pooled across seeds within each condition and bucket; thresholds are still checked for every primary condition/seed/bucket. Exact-reference match and CER are synthetic-reference metrics, not human naturalness.", "",
+              "| Mode | Self-feeding rate | Source-copy weight | Language-balance weight | TIDE aux multiplier | Edge balance | Decoder | Bucket | Checker coverage | Action fidelity | Preservation | Context marker | Accepted references | CER | Nonempty | Unicode | EOS |", "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|"]
+    conditions = sorted({(item["mode"], item["scheduled_sampling_rate"], item["source_copy_weight"], item["latent_objective_weight"], item["transition_balance"], item["decoder"], item["language_balance_weight"])
+                         for item in results}, key=lambda value: (value[0], value[1], value[2], value[3] or 0.0, value[4], value[5], value[6]))
+    for mode, sampling_rate, copy_weight, latent_weight, transition_balance, decoder, language_balance_weight in conditions:
         condition_runs = [item for item in results
-                          if item["mode"] == mode and item["source_copy_weight"] == copy_weight
+                          if item["mode"] == mode and item["scheduled_sampling_rate"] == sampling_rate
+                          and item["source_copy_weight"] == copy_weight
                           and item["latent_objective_weight"] == latent_weight
-                          and item["transition_balance"] == transition_balance and item["decoder"] == decoder]
+                          and item["transition_balance"] == transition_balance and item["decoder"] == decoder
+                          and item["language_balance_weight"] == language_balance_weight]
         for bucket in buckets:
             scores = [item["generation"]["scores"][bucket] for item in condition_runs]
-            sums = {key: sum(score[key] for score in scores) for key in SCORE_FIELDS}
+            sums = {key: sum(score.get(key, 0) for score in scores) for key in SCORE_FIELDS}
             action = f"{sums['action_fidelity_pass']}/{sums['action_fidelity_known']}"
             preserve = f"{sums['preservation_pass']}/{sums['preservation_known']}"
+            context = f"{sums['context_preservation_pass']}/{sums['context_preservation_known']}"
             coverage = f"{sums['checker_coverage']}/{sums['examples']}"
             accepted = f"{sums['accepted_reference_matches']}/{sums['examples']}"
             cer = sums["edit_distance"] / sums["reference_characters"] if sums["reference_characters"] else 0.0
@@ -193,19 +209,20 @@ def summarize_validation(directory, destination):
             eos_rate = f"{sums['terminated_eos']}/{sums['examples']}"
             nonempty_rate = f"{sums['nonempty']}/{sums['examples']}"
             latent = "—" if latent_weight is None else f"{latent_weight:g}"
-            lines.append(f"| {mode} | {copy_weight:g} | {latent} | {transition_balance} | {decoder} | {bucket} | {coverage} | {action} | {preserve} | {accepted} | {cer:.1%} | {nonempty_rate} | {unicode_rate} | {eos_rate} |")
+            lines.append(f"| {mode} | {sampling_rate:g} | {copy_weight:g} | {language_balance_weight:g} | {latent} | {transition_balance} | {decoder} | {bucket} | {coverage} | {action} | {preserve} | {context} | {accepted} | {cer:.1%} | {nonempty_rate} | {unicode_rate} | {eos_rate} |")
 
     lines += ["", "## Primary-mode validation diagnostics by seed", "",
               "Counts below preserve the frozen seed-by-seed gate denominator. No generated or reference text is included.", "",
-              "| Source-copy weight | TIDE aux multiplier | Edge balance | Decoder | Seed | Bucket | Checker coverage | Action fidelity | Preservation | Accepted references | CER | Unicode | EOS | Failure reason | Bucket gate |",
-              "|---:|---:|---|---|---:|---|---:|---:|---:|---:|---:|---:|---:|---|---|"]
-    for item in sorted(primary_runs, key=lambda value: (value["source_copy_weight"], value["latent_objective_weight"] or 0.0, value["transition_balance"], value["decoder"], value["seed"])):
+              "| Self-feeding rate | Source-copy weight | Language-balance weight | TIDE aux multiplier | Edge balance | Decoder | Seed | Bucket | Checker coverage | Action fidelity | Preservation | Context marker | Accepted references | CER | Unicode | EOS | Failure reason | Bucket gate |",
+              "|---:|---:|---:|---|---|---:|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|---|"]
+    for item in sorted(primary_runs, key=lambda value: (value["scheduled_sampling_rate"], value["source_copy_weight"], value["language_balance_weight"], value["latent_objective_weight"] or 0.0, value["transition_balance"], value["decoder"], value["seed"])):
         generation = item["generation"]
         checks = generation["quality_gate"]["bucket_checks"]
         for bucket in buckets:
             score = generation["scores"][bucket]
             action = f"{score['action_fidelity_pass']}/{score['action_fidelity_known']}"
             preserve = f"{score['preservation_pass']}/{score['preservation_known']}"
+            context = f"{score.get('context_preservation_pass', 0)}/{score.get('context_preservation_known', 0)}"
             coverage = f"{score['checker_coverage']}/{score['examples']}"
             accepted = f"{score['accepted_reference_matches']}/{score['examples']}"
             cer = (score["edit_distance"] / score["reference_characters"]
@@ -218,7 +235,7 @@ def summarize_validation(directory, destination):
                 failures.append("semantic_checker_coverage")
             failure_reason = ", ".join(failures) if failures else "—"
             latent = "—" if item["latent_objective_weight"] is None else f"{item['latent_objective_weight']:g}"
-            lines.append(f"| {item['source_copy_weight']:g} | {latent} | {item['transition_balance']} | {item['decoder']} | {item['seed']} | {bucket} | {coverage} | {action} | {preserve} | {accepted} | {cer:.1%} | {unicode_rate} | {eos_rate} | {failure_reason} | {bucket_gate} |")
+            lines.append(f"| {item['scheduled_sampling_rate']:g} | {item['source_copy_weight']:g} | {item['language_balance_weight']:g} | {latent} | {item['transition_balance']} | {item['decoder']} | {item['seed']} | {bucket} | {coverage} | {action} | {preserve} | {context} | {accepted} | {cer:.1%} | {unicode_rate} | {eos_rate} | {failure_reason} | {bucket_gate} |")
 
     lines += ["", "## Limits and interpretation", "",
               "Valid Unicode and EOS termination do not establish semantic correctness. The deterministic checker covers only the declared synthetic tense/polarity grammar and named roles. This benchmark tests recombination of familiar lexical factors; it does not establish naturalness, natural-corpus efficacy, or scientific efficacy. Control results are diagnostic; no TIDE advantage is claimed.", "",

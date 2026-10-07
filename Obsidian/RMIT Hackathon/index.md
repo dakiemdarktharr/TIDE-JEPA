@@ -8,10 +8,31 @@ This folder is an Obsidian-compatible, project-local knowledge vault. Open this 
 - [[wiki/RMIT Hackathon 2026]] — current official event-format facts, unresolved deliverables, and page inconsistencies.
 - [[wiki/Dataset Research — 2026-09-30]] — current corpus decision, PhoMT conditional permission, mandatory paper citation/release checklist, and intake status. The 2026-09-28 page is historical research context.
 - [[wiki/First Implementation Milestone]] — data-agnostic TIDE-JEPA prototype, independent review, and verification limits.
-- [[experiments/index]] — AI-reviewed synthetic Vi–En preliminary pilots; v4.20 completed training and validation, failed the quality gate, and retained its sealed holdout.
+- [[experiments/index]] — AI-reviewed synthetic Vi–En preliminary pilots; v4.29 failed its frozen gate, while v4.30's completed metrics are limited by a checker defect. Both release holdouts remain sealed; v4.27/v4.28 were retired after holdout exposure.
+- [v4.29 status](../../VI_EN_RESULTS_V4.29_STATUS.md) — six runs and validation complete; 1/6 full-config gates and 37/60 seed-by-bucket checks passed; holdout sealed.
+- [v4.29 validation](../../VI_EN_RESULTS_V4.29_VALIDATION.md) — aggregate-only metrics, frozen thresholds, and per-seed diagnostics.
+- [v4.29 component diagnostic](../../VI_EN_RESULTS_V4.29_DIAGNOSTIC.md) — post-hoc role preservation by language and balance condition.
+- [v4.29 action sensitivity](../../VI_EN_RESULTS_V4.29_ACTION_SENSITIVITY.md) — paired outputs changed under distinct actions; not correctness evidence.
+- [v4.28 disposition](../../VI_EN_RESULTS_V4.28_STATUS.md) — retired before freeze/training after holdout frame annotations were accessed.
+- [v4.26 status](../../VI_EN_RESULTS_V4.26_STATUS.md) — 6/6 runs complete; 1/6 config gates and 32/60 seed-by-bucket checks passed; holdout sealed.
+- [v4.26 validation](../../VI_EN_RESULTS_V4.26_VALIDATION.md) — aggregate-only outcomes, frozen thresholds, and teacher-forced/free-generation distinction.
+- [v4.26 component diagnostic](../../VI_EN_RESULTS_V4.26_DIAGNOSTIC.md) — post-hoc role retention by language and source-copy weight.
+- [v4.26 action sensitivity](../../VI_EN_RESULTS_V4.26_ACTION_SENSITIVITY.md) — aggregate comparison for changed requested actions.
+- [v4.25 status](../../VI_EN_RESULTS_V4.25_STATUS.md) — 6/6 runs complete; 3/6 config gates and 44/60 seed-by-bucket checks passed; holdout sealed.
+- [v4.25 validation](../../VI_EN_RESULTS_V4.25_VALIDATION.md) — aggregate-only outcomes, frozen thresholds, and teacher-forced/free-generation distinction.
+- [v4.25 component diagnostic](../../VI_EN_RESULTS_V4.25_DIAGNOSTIC.md) — post-hoc role retention separated by self-feeding rate.
+- [v4.25 action sensitivity](../../VI_EN_RESULTS_V4.25_ACTION_SENSITIVITY.md) — aggregate comparison for changed requested actions.
+- [v4.24 status](../../VI_EN_RESULTS_V4.24_STATUS.md) — 6/6 runs complete; 0/6 full-config gates passed, with duplicate training-log rows in three configs; holdout sealed.
+- [v4.24 validation](../../VI_EN_RESULTS_V4.24_VALIDATION.md) — aggregate-only outcomes and frozen thresholds.
+- [v4.24 component diagnostic](../../VI_EN_RESULTS_V4.24_DIAGNOSTIC.md) — post-hoc role retention by language/task.
+- [v4.24 action sensitivity](../../VI_EN_RESULTS_V4.24_ACTION_SENSITIVITY.md) — aggregate comparison for changed requested actions.
+- [v4.23 status](../../VI_EN_RESULTS_V4.23_STATUS.md) — 12/12 runs and validation complete, 0/120 gates passed; release holdout sealed.
+- [v4.23 validation](../../VI_EN_RESULTS_V4.23_VALIDATION.md) — aggregate-only metrics with per-seed denominators.
+- [v4.23 component diagnostic](../../VI_EN_RESULTS_V4.23_DIAGNOSTIC.md) — post-hoc role retention and teacher-forced loss diagnostics.
+- [v4.23 action sensitivity](../../VI_EN_RESULTS_V4.23_ACTION_SENSITIVITY.md) — aggregate validation comparison for changed requested actions.
 - [v4.20 status](../../VI_EN_RESULTS_V4.20_STATUS.md) — six decoder-comparison runs complete; validation gate failed and release holdout remains sealed.
 - [v4.20 validation report](../../VI_EN_RESULTS_V4.20_VALIDATION.md) — aggregate-only validation outcomes by decoder, language, action, path, and seed.
-- [v4.21 frozen status](../../VI_EN_RESULTS_V4.21_STATUS.md) — fresh 2×2 source-copy × decoder protocol; independent reviews complete, no result yet.
+- [v4.21 status](../../VI_EN_RESULTS_V4.21_STATUS.md) — historical run with zero semantic-checker coverage; invalid for quality interpretation.
 - [v4.19 status](../../VI_EN_RESULTS_V4.19_STATUS.md) — 12/12 runs and validation complete; 0/12 configurations passed, release holdout remains sealed.
 - [v4.19 validation report](../../VI_EN_RESULTS_V4.19_VALIDATION.md) — aggregate-only frozen gate, denominators, and per-seed bucket outcomes.
 - [v4.13 status](../../VI_EN_RESULTS_V4.13_STATUS.md) — fresh, independently Luna-reviewed dose-response; 12/12 runs completed, both primary TIDE gates failed and holdout remains sealed.
@@ -22,7 +43,7 @@ This folder is an Obsidian-compatible, project-local knowledge vault. Open this 
 - [v4.17 status](../../VI_EN_RESULTS_V4.17_STATUS.md) — 12 runs and validation complete; all 60 primary checks failed, holdout sealed. See [aggregate report](../../VI_EN_RESULTS_V4.17_VALIDATION.md).
 - [v4.15 status](../../VI_EN_RESULTS_V4.15_STATUS.md) — latest completed nine-run comparison; primary TIDE gate failed and holdout sealed.
 - [v4.14 status](../../VI_EN_RESULTS_V4.14_STATUS.md) — corrected 15,360-record context-diversity pilot; six runs and validation completed, frozen TIDE gate failed, holdout sealed.
-- [VI_EN_RESULTS.md](../../VI_EN_RESULTS.md) — current v4.20 validation failure and sealed release holdout; prior aggregate evaluations preserved.
+- [VI_EN_RESULTS.md](../../VI_EN_RESULTS.md) — current v4.29 validation failure; earlier aggregate evaluations preserved.
 - [v4.10 status](../../VI_EN_RESULTS_V4.10_STATUS.md) — frozen private synthetic protocol with two independent Luna approvals; 12/12 training and validation complete, TIDE preservation gate failed and holdout remains sealed. See the [validation report](../../VI_EN_RESULTS_V4.10_VALIDATION.md). v4.9 was superseded before training.
 - v4.14 — six matched runs and validation-only evaluation complete; 4/30 primary seed-by-bucket checks passed, all four held-out paths; all 24 single-action checks failed. Token-only pooled preservation exceeded TIDE in all buckets. Holdout remains sealed. See [status](../../VI_EN_RESULTS_V4.14_STATUS.md) and the [aggregate report](../../VI_EN_RESULTS_V4.14_VALIDATION.md).
 - v4.13 — 12/12 dose-response runs and validation-only evaluation complete; only 10/60 seed-by-bucket checks passed, including one single-action bucket; 47/48 single-action buckets failed, and three path buckets failed. Direct test scoring was refused; holdout remains sealed. See [status](../../VI_EN_RESULTS_V4.13_STATUS.md) and the [aggregate report](../../VI_EN_RESULTS_V4.13_VALIDATION.md).

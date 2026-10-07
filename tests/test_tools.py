@@ -98,6 +98,8 @@ class ValidationReportTests(unittest.TestCase):
         text = destination.read_text()
         self.assertIn("| vocabulary | en/single/TIME:PAST | 4/4 |", text)
         self.assertIn("| source_pointer | en/single/TIME:PAST | 4/4 |", text)
+        self.assertIn("| Preservation | Context marker | Accepted references |", text)
+        self.assertIn("| 0/4 | 0/4 | 0/0 | 0/4 |", text)
         self.assertNotIn("8/8", text)
 
     def test_rejects_changed_checkpoint_or_incomplete_epoch_log(self):
@@ -113,6 +115,19 @@ class ValidationReportTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "registered epoch"):
             self.script.summarize_validation(self.base, self.base / "report.md")
         self.assertFalse((self.base / "report.md").exists())
+
+
+class PreservationDiagnosticTests(unittest.TestCase):
+    def test_keeps_language_balance_conditions_separate(self):
+        script = load_script("diagnose_validation_preservation")
+        base = {"seed": 17, "objective": {"mode": "tide", "source_copy_weight": 0}}
+        unbalanced = {**base, "objective": {**base["objective"], "language_balance_weight": 0}}
+        balanced = {**base, "objective": {**base["objective"], "language_balance_weight": 1}}
+        key_zero = script._condition_bucket(unbalanced, "en", "single", "TIME:NOW")
+        key_one = script._condition_bucket(balanced, "en", "single", "TIME:NOW")
+        self.assertNotEqual(key_zero, key_one)
+        self.assertIn("language-balance-0", key_zero)
+        self.assertIn("language-balance-1", key_one)
 
 
 class FrozenLauncherTests(unittest.TestCase):

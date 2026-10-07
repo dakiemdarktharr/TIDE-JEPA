@@ -2,7 +2,7 @@
 
 Status: active engineering closure record. Findings are traced to regression coverage and probe evidence; this does not assert that untested bugs cannot exist. The current project-local runtime on Windows is Python 3.11.9 with PyTorch 2.14.0+cpu; after v4.8 implementation changes, 69 unit tests passed with 0 skipped, plus compile and dependency checks. A v4.8 CPU training run was stopped at the user's request before all configurations completed. See [the aggregate-only v4.8 status](../../VI_EN_RESULTS_V4.8_STATUS.md). No v4.8 validation result exists; Q01 remains open and blocks goal completion.
 
-The historical snapshots below are retained as dated records. Current status is summarized in the 2026-10-06 v4.20 section at the end of this file; that section supersedes earlier statements that v4.16/v4.19 training or validation remained pending.
+The historical snapshots below are retained as dated records. Current status is summarized in the latest dated checkpoint at the end of this file; the 2026-10-07 v4.25 section supersedes older pending-run statements and prior model-quality status summaries.
 
 | ID | Closure evidence | Status |
 |---|---|---|
@@ -99,3 +99,184 @@ Current runtime verification used Python 3.11.17 and PyTorch 2.14.0+cpu. The rep
 | G05 | External gates remain closed | No PhoMT semantic-action labeling/training or Phan Rang Cham training/evaluation occurred. Cham remains deferred pending dataset-use permission and language/community review. |
 
 v4.20 used a fresh AI-authored synthetic corpus and two independent AI reviews. All six fixed-final-epoch runs reached 29 epochs / 3,248 updates; latest/best/resolved identities matched. Validation covered all 8,640 requests per decoder with full checker coverage, Unicode and EOS. The frozen quality gate failed all 60 seed-by-bucket checks. Pooled action fidelity was 42.6% (vocabulary) and 32.5% (source pointer); preservation was 0.57% and 0.45%. The decoder hypothesis was unsupported. These remain preliminary synthetic results, not human validation. See [v4.20 status](../../VI_EN_RESULTS_V4.20_STATUS.md), [aggregate report](../../VI_EN_RESULTS_V4.20_VALIDATION.md), and the explicitly post-hoc [component diagnostic](../../VI_EN_RESULTS_V4.20_DIAGNOSTIC.md). Training did not crash; the fail-closed validation-to-test guard stopped the suite and kept the release holdout sealed.
+
+## 2026-10-07 current audit and v4.23 quality checkpoint
+
+Linux runtime: Python 3.11.17, PyTorch 2.14.0+cpu. The latest full suite remains 112/112 with 0 skips; compileall, `pip check`, and isolated demo-DOM checks passed. The new aggregate action-sensitivity script was run against all 12 saved validation runs and produced 24 language-condition rows without displaying or writing source/generated text. `git diff --check` passed for this update.
+
+| ID | Current status | Evidence and remaining boundary |
+|---|---|---|
+| E01 | Closed for tested metrics | Denominator regressions remain covered by the 112-test Linux suite. |
+| E02 | Partial | Resume/crash recovery is covered; remaining filesystem-publication interruption points lack a full fault-injection matrix. |
+| E03–E11 | Closed for tested cases | Identity, split, evaluator, holdout, resource preflight, and schema checks remain bounded to the regression cases documented above. |
+| E12 | Partial | Request limits/timeouts are covered; slow/incomplete-body and soak behavior remain untested. |
+| E13 | Closed for declared contract | Same-language generation is enforced; cross-language translation is unsupported. |
+| E14 | Partial | Isolated DOM behavior is covered; full visual browser integration remains unverified on this host. |
+| Q01 | Open; blocks completion | v4.23 had complete checker coverage but 0/120 frozen quality checks passed. Validation-only scoring left its 3,200-record release holdout sealed; no test artifacts exist. A fresh reviewed version is required for further model selection. |
+| G01 | Partial | Current Linux CPU suite/compile/dependency evidence passes. Exact clean-source bootstrap exists for an earlier tracked snapshot; fresh OS image, locked transitive dependencies, and GPU remain unverified. |
+| G02 | Closed for v4.23 aggregate report | The frozen report verifies all 12 runs and validation identities, separates decoder conditions, and reports aggregate results only. New post-hoc diagnostics are explicitly labeled and do not change the frozen gate. |
+| G03 | Updated for v4.23 | README, ROADMAP, spec, pilot/results/history, Ground Truth, vault indexes/log now identify v4.23 as current. Raw historical notes remain unchanged. |
+| G04 | Open research gate | No human language evaluation, natural-corpus evidence, matched-FLOP efficacy, or TIDE advantage is established. |
+| G05 | External gates remain closed | No PhoMT training/derived action annotation and no Cham training/evaluation occurred. Cham remains deferred pending data-use permission and language/community review. |
+
+v4.23's post-hoc component analysis locates weak patient/predicate retention. Exact output comparison across two distinct requested actions for the same source changed the generated string in 97.7–100% of 640 pairs per language/condition. This argues against a simple “action ignored” explanation but does not prove correct action semantics. Mean final-epoch teacher-forced token-loss gaps were modest; free-generation quality still failed. The latent variance penalty remained nonzero and rose under copy weight 1.5, so under-dispersion is a hypothesis, not proof of total latent collapse. See [v4.23 status](../../VI_EN_RESULTS_V4.23_STATUS.md), [frozen report](../../VI_EN_RESULTS_V4.23_VALIDATION.md), [component diagnostic](../../VI_EN_RESULTS_V4.23_DIAGNOSTIC.md), and [action-sensitivity diagnostic](../../VI_EN_RESULTS_V4.23_ACTION_SENSITIVITY.md). No private rows/generations entered Git. No commit or push was made.
+
+## 2026-10-07 v4.24 checkpoint and resume-log repair
+
+The v4.24 review-bound corpus and protocol identities were verified. Six fixed-final TIDE runs reached epoch 29 / 3,248 updates; `best.pt` and `latest.pt` tensors matched in every run. Six validation-only reports covered 17,280 examples with 100% Unicode, EOS, and checker coverage. The quality gate failed for all six configs (28/60 bucket checks passed); English TIME:NOW preservation was below threshold in all six. The 3,200-record release holdout remains sealed, and the suite exited at the intended fail-closed test gate. See [v4.24 status](../../VI_EN_RESULTS_V4.24_STATUS.md), [aggregate report](../../VI_EN_RESULTS_V4.24_VALIDATION.md), [component diagnostic](../../VI_EN_RESULTS_V4.24_DIAGNOSTIC.md), and [action sensitivity](../../VI_EN_RESULTS_V4.24_ACTION_SENSITIVITY.md).
+
+The post-training audit found duplicate, conflicting epoch/split rows in the v4.24 CSVs for copy-0 seed 17, copy-1.5 seed 17, and copy-1.5 seed 41. Their final checkpoints are complete and matched to the saved validation generation identities, but those three logs cannot support loss-curve or teacher-forced fit claims. `_reconcile_metrics_log` previously accepted repeated rows when both split names existed for an epoch. It now requires exactly one train and one validation row per published epoch, rejects malformed rows, and only discards rows beyond the checkpoint epoch. A regression test appends a duplicate row and verifies that resume fails closed. The historical v4.24 artifacts were not edited. E02 remains partial until a fresh crash/recovery run also proves unique metrics across interruption boundaries.
+
+Linux verification after the fix: 113/113 CPU tests passed with zero skips, including the duplicate-log rejection regression; `compileall`, `pip check`, `git diff --check`, and the synthetic `root_probes.py` run passed. The root probe used only the original synthetic test fixture and verified crash recovery, the single-run release-test gate, and rejection when corpus/split identities are changed. Runtime was Linux x86_64, Python 3.11.17, PyTorch 2.14.0+cpu, CPU-only; NumPy is absent and PyTorch emitted its optional NumPy initialization warning, but `pip check` found no broken requirements and tests/tensor runs passed.
+
+| Gate | Updated status | Evidence |
+|---|---|---|
+| E02 | Partial; duplicate/missing metric rows now fail closed. Additional publication fault-injection cases remain open. | Regression test rejects a duplicate CSV row; synthetic crash probe still recovers the `latest.pt`/`best.pt` publication window. v4.24 historical logs remain anomalous and unchanged. |
+| Q01 | Open; blocks goal completion. | v4.24 completed validation but passed 0/6 full configs and 28/60 buckets. Its 3,200-record release holdout remains sealed. |
+| G01 | Partial. | Linux suite, compile, dependency check, and root probe pass. Fresh clean-source bootstrap after the latest source fix and dependency lockfile remain outstanding. |
+| G02 | Closed for v4.24 report contract. | 17,280 validation examples, aggregate-only rates/denominators and per-bucket gates recorded; test artifacts absent. |
+| G03 | Updated for v4.24. | README, ROADMAP, spec, pilot/results/history, Ground Truth, vault indexes/log, and audit closure now identify v4.24 as current; raw history remains unchanged. |
+
+Raw source/generation text remains private and was not included in this closure. No commit or push was made.
+
+## 2026-10-07 v4.25 quality and evidence checkpoint
+
+The fresh v4.25 corpus/protocol was independently reviewed and frozen; six CPU runs completed at the registered final epoch, and validation-only generation finished for every config. Post-training checks verified the frozen config/protocol identities, checkpoint identity, equal `latest.pt`/`best.pt` tensors, exactly one train and validation metric row per epoch, and no test artifacts. The frozen validation gate failed: **3/6 full-config gates and 44/60 seed-by-bucket checks passed**. Unicode, EOS, and checker coverage were complete. One-pass self-feeding at 0.2 did not consistently improve free-generation preservation over teacher forcing; losses are teacher-forced and do not substitute for autoregressive quality. The release holdout was not evaluated. OOD/refusal behavior was not measured by this validation set. See [v4.25 status](../../VI_EN_RESULTS_V4.25_STATUS.md), [validation](../../VI_EN_RESULTS_V4.25_VALIDATION.md), [component diagnostic](../../VI_EN_RESULTS_V4.25_DIAGNOSTIC.md), and [action sensitivity](../../VI_EN_RESULTS_V4.25_ACTION_SENSITIVITY.md).
+
+| ID | Current status at v4.25 checkpoint | Evidence and remaining boundary |
+|---|---|---|
+| E01 | Closed for tested metrics | Linux tensor/regression suite passes without skips; aggregate reporting preserves metric-specific denominators. |
+| E02 | Partial | Duplicate/missing metric rows fail closed; checkpoint crash recovery and latest/best identity are covered, but all filesystem publication interruption points lack a complete fault-injection matrix. |
+| E03–E11 | Closed for tested cases | Identity, grouped split, reviewer/protocol, immutable release holdout, resource limits, generation validation, padding, and schema checks remain bounded to documented regression coverage. |
+| E12 | Partial | Tested body/action/token limits, loopback checks, timeouts, and inference-slot recovery; slow/incomplete-body and soak tests remain outstanding. |
+| E13 | Closed for declared API contract | Same-language generation is enforced; cross-language translation is unsupported. |
+| E14 | Partial | Browser/API and stale-response evidence remains bounded to the previously documented local/simulated paths; full end-to-end visual coverage is incomplete. |
+| Q01 | Open; blocks completion | v4.25 fails the frozen validation gate (3/6 configs, 44/60 seed-by-bucket checks); the release holdout remains sealed. No checkpoint is approved for usable language output. |
+| G01 | Partial | Linux Python 3.11.17 / PyTorch 2.14.0+cpu suite: 118 tests, 0 skips; compileall and `pip check` pass. The refreshed synthetic root probe confirms crash recovery, `latest`/`best` recovery, the release gate, and stale-review rejection. A clean-source bootstrap after the newest source edits and a complete dependency lock remain outstanding. |
+| G02 | Closed for v4.25 validation report contract | The aggregate report separates the two self-feeding rates, lists denominators and per-seed gate outcomes, and records that no holdout/test artifact was produced. |
+| G03 | Updated for v4.25 | README, roadmap, specification, pilot/results/history, Ground Truth, vault indexes/log, and this closure now point to the latest failure while preserving prior outcomes. Raw notes remain unchanged. |
+| G04 | Open research gate | No human/native-speaker validation, broad natural-corpus evidence, or matched-compute scientific claim exists. |
+| G05 | External gates remain closed | PhoMT was not used for training or evaluation. Phan Rang Cham remains deferred pending dataset-use permission and language/community review. |
+
+The pilot remains preliminary AI-authored/AI-reviewed synthetic evidence (`human_validated=false`). All source, generated, and reference rows remain in Git-ignored `data/` and `runs/`; reports contain aggregate metrics only. No commit or push was made.
+
+Linux verification commands for this checkpoint:
+
+```sh
+PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -B -m unittest discover -s tests -q
+.venv/bin/python -B -m compileall -q tide_jepa tests scripts audits/2026-10-02/root_probes.py
+.venv/bin/python -m pip check
+.venv/bin/python -B audits/2026-10-02/root_probes.py --output /tmp/rmit-root-probe-v426-20261007.json
+git diff --check
+```
+
+## 2026-10-07 v4.26 quality and evidence checkpoint
+
+The fresh v4.26 corpus and protocol passed two independent Luna/high AI reviews and artifact-bound adjudication. Six fixed-final TIDE configs completed 29 epochs / 3,248 updates. The first pair of seed-41 output directories showed overlapping/incomplete intermediate writes after an accidentally repeated trainer invocation; those outputs were moved to an ignored quarantine directory and excluded. The two seed-41 configs were then completed from a coherent epoch-19 checkpoint under one process pool. Accepted artifacts across all six configs passed protocol/config/runtime identity checks, exact latest/best tensor equality, 58 unique train/validation rows, and absence of test artifacts. All workers had exited before the integrity audit and validation-only evaluation.
+
+Validation covered 17,280 examples with 100% Unicode, EOS, and semantic checker coverage. The frozen quality gate failed: **1/6 configs and 32/60 seed-by-bucket checks passed**. Source-copy weight 0.25 improved Vietnamese aggregate preservation but lowered English single-action preservation (79.5% to 68.8% when compared with weight 0); English patient retention was 85.3% at weight 0 and 79.1% at 0.25. The same-source action-sensitivity diagnostic found different outputs for all 640 pairs per language/config, which is not proof of semantic correctness. The 3,200-record release holdout remains sealed. OOD/refusal quality was not measured. See [v4.26 status](../../VI_EN_RESULTS_V4.26_STATUS.md), [validation](../../VI_EN_RESULTS_V4.26_VALIDATION.md), [component diagnostic](../../VI_EN_RESULTS_V4.26_DIAGNOSTIC.md), and [action sensitivity](../../VI_EN_RESULTS_V4.26_ACTION_SENSITIVITY.md).
+
+Linux verification for the implementation used in v4.26: Python 3.11.17, PyTorch 2.14.0+cpu; 118 unit tests passed with 0 skips, `compileall`, `pip check`, `git diff --check`, and the aggregate synthetic root probe passed. NumPy is absent and PyTorch emits its optional NumPy initialization warning; no requirements are broken. Tests and software probes establish engineering behavior only, not language quality.
+
+| ID | Current status at v4.26 checkpoint | Evidence and remaining boundary |
+|---|---|---|
+| E01 | Closed for tested metrics | Denominator/accounting regressions pass the Linux suite; semantic gate remains independent. |
+| E02 | Partial | Resume reconciles exact checkpoint epochs; accepted v4.26 logs have unique rows and matching checkpoints. Broader filesystem-publication fault injection and concurrent-run locking remain untested. |
+| E03–E11 | Closed for tested cases | Identity, grouped split, review/protocol, immutable holdout, resource preflight, generation validation, padding, and schema checks remain bounded to documented regressions. |
+| E12 | Partial | Request limits/timeouts are covered; slow/incomplete-body and soak behavior remain outstanding. |
+| E13 | Closed for declared API contract | Same-language generation is enforced; cross-language translation is unsupported. |
+| E14 | Partial | Isolated DOM/API evidence exists; full visual browser integration remains unverified on this host. |
+| Q01 | Open; blocks goal completion | v4.26 failed with 1/6 full configs and 32/60 bucket checks; no checkpoint is usable and release holdout remains sealed. |
+| G01 | Partial | Linux 118-test suite, compile, dependency check, and root probe pass. A blank-host clean bootstrap and complete dependency lock remain outstanding. |
+| G02 | Closed for v4.26 report contract | All six runs passed identity/metrics checks; validation report contains per-seed denominators and aggregate metrics only; no test artifacts were created. |
+| G03 | Updated for v4.26 | README, ROADMAP, spec, pilot/results/history, Ground Truth, vault indexes/log, and this closure identify v4.26 as current; raw notes and prior results remain unchanged. |
+| G04 | Open research gate | No human/native-speaker validation, natural-corpus efficacy, matched-compute scientific claim, or TIDE advantage is established. |
+| G05 | External gates remain closed | PhoMT was not used for training/evaluation. Phan Rang Cham remains deferred pending dataset-use permission and language/community review. |
+
+All source, reference, and generated rows remain under Git-ignored `data/` and `runs/`; reports contain only aggregate evidence. No commit or push was made.
+
+Linux verification commands for this checkpoint:
+
+```sh
+PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -B -m unittest discover -s tests -q
+.venv/bin/python -B -m compileall -q tide_jepa tests scripts audits/2026-10-02/root_probes.py
+.venv/bin/python -m pip check
+.venv/bin/python -B audits/2026-10-02/root_probes.py --output /tmp/rmit-root-probe-v426-20261007.json
+git diff --check
+.venv/bin/python -B scripts/train_vi_en_parallel.py data/pilot/vi-en-ai-v4.26 --workers 2
+.venv/bin/python -B -m tide_jepa.pilot evaluate data/pilot/vi-en-ai-v4.26 --evaluation-split validation
+.venv/bin/python -B scripts/summarize_vi_en_validation.py data/pilot/vi-en-ai-v4.26 VI_EN_RESULTS_V4.26_VALIDATION.md
+```
+
+## 2026-10-07 v4.30 frozen training checkpoint
+
+The fresh v4.30 train/validation-only review bundle was inspected independently by two `gpt-6-luna` high reviewers. One approved; the other requested adjudication on duplicate row weighting and English tense forms. An aggregate-only local check confirmed the declared progressive form on all 3,040 present-target records. Past-tense targets correctly use the past form under positive polarity and `did not` plus the base form under negative polarity. Exact source-target duplicates occur as standalone and path-edge rows in the same group/split; the 640 extra validation rows are disclosed as row weighting and are not treated as independent evidence. The release holdout was not inspected.
+
+The initial freeze attempt uncovered a review-binding defect: the reviewer records included the corpus hash, while `REVIEWED_ARTIFACTS` omitted it from the equality check. Added `corpus.draft.jsonl` to the bound artifact set and passed four focused review/freeze regression tests, including current two-review adjudication and incomplete-hash rejection. The exact v4.30 draft then froze successfully with six configs (vocabulary/source-pointer decoders × seeds 17/23/41), fixed 29 epochs, width 64, and CPU runtime identity. Six workers are training; no metrics have been read while training is in progress. Holdout remains sealed; Q01 remains open and no usable checkpoint is approved.
+
+| ID | Current status at v4.30 freeze | Evidence / boundary |
+|---|---|---|
+| E01 | Closed for tested denominators | Existing metric-denominator regression suite remains in place; v4.30 evaluation still pending. |
+| E03 | Closed for the newly observed review-hash omission | `REVIEWED_ARTIFACTS` now includes the corpus and all five metadata artifacts; focused current-review freeze and tamper tests pass. |
+| Q01 | Open; blocks goal completion | v4.29 failed its frozen quality gate. v4.30 training and validation are not complete. |
+| G01 | Partial | Four targeted review/freeze regression tests pass. Full suite and post-training integrity/evaluation checks remain to run. |
+| G02 | In progress | v4.30 protocol is frozen; runs and validation-only aggregate report remain pending. |
+| G03 | Updated for the v4.30 freeze | README, ROADMAP, pilot/results, Ground Truth, vault indexes/log, and this checkpoint now distinguish v4.29's failed result from v4.30's active runs. |
+| G04–G05 | External/research gates unchanged | No human/native-speaker evidence, matched-FLOP claim, PhoMT training, or Phan Rang Cham use is authorized by this checkpoint. |
+
+The corpus, review records, adjudication, protocol, metrics and weights remain under ignored `data/` and `runs/`. No commit or push was made.
+
+## 2026-10-07 v4.27–v4.29 review-scope incident and remediation
+
+v4.27 was retired after review activity exposed test-split content. v4.28 was also retired before freeze/training after a reviewer parsed the complete semantic-frame catalog and marked holdout annotations inspected. No v4.28 holdout sentence was emitted or evaluated. Both versions remain preserved as incident evidence and are not eligible for a sealed-holdout claim.
+
+v4.29 uses a fresh split and a generated reviewer bundle that contains only train/validation records, frames, groups, alignments, and inventory. Freeze verifies the manifest, content hashes, record count, and split membership; both Luna/high reviewers approved 12,160 rows against the exact bundle and draft hashes without inspecting or emitting holdout text. The adjudication records the action-to-frame mapping and the narrow context checker scope: the declared place marker only, not broader discourse context. Six configurations are frozen (three seeds × language-balance weight 0/1); CPU training has started. No checkpoint integrity audit, validation, or release-holdout evaluation has yet occurred. Q01 remains open and no checkpoint is usable.
+
+The latest Linux suite passed 123 tests with no skips. `compileall`, `pip check`, `git diff --check`, and the synthetic root probe passed. These results establish engineering behavior only. Runtime remains Python 3.11.17 / PyTorch 2.14.0+cpu, with no CUDA and an optional NumPy initialization warning. The v4.8 local artifact hashes match its status note, but its private data/run directories are absent on lattice and its frozen Windows runtime identity differs, so it was not resumed.
+
+No PhoMT rows were used or printed. Phan Rang Cham remains deferred. No commit or push was made.
+
+## 2026-10-07 v4.29 validation and current closure
+
+The v4.29 review-scope remediation passed its frozen checks: both independent Luna/high reviews were bound to the isolated train/validation bundle, and the complete frozen protocol/runtime identities matched before training. All six CPU runs completed at epoch 29 / 3,248 updates. After every worker exited, an integrity audit verified config/approval/code/runtime hashes, resolved run identities, identical `latest.pt` and `best.pt` tensors, complete 29-epoch train/validation metrics, and absence of test artifacts. Validation-only generation completed for all six runs with full identity checking.
+
+The quality gate failed closed. One of six configurations passed all its buckets; 37/60 seed-by-bucket checks passed (22/30 with language-balance weight 0, 15/30 with weight 1). Validation covered 17,280 generated examples. Unicode, EOS, nonempty output, and semantic checker coverage were each 17,280/17,280. Preservation failures were concentrated in English single-action buckets; language-balance weight 1 also regressed Vietnamese seed 41. The 3,200-record release holdout remains sealed, with no test metrics or generated test artifacts. OOD/refusal and truncation quality were not measured. No checkpoint is approved for usable output. See [v4.29 status](../../VI_EN_RESULTS_V4.29_STATUS.md) and the [aggregate-only validation report](../../VI_EN_RESULTS_V4.29_VALIDATION.md).
+
+The aggregate-report review caught a presentation defect in the per-seed diagnostic table: its context-marker column was missing from the header and inherited a stale value from the pooled table. The summarizer now derives the context count from each run/bucket and a regression test checks column alignment. The corrected report was regenerated; validation metrics and the frozen evaluator were not changed.
+
+| ID | Current status | Evidence and remaining boundary |
+|---|---|---|
+| E01–E11 | Closed for tested cases | Linux unit/probe coverage, frozen identities, split and output gates, run/checkpoint consistency, and v4.29 validation report checks pass within documented test scope. Broader filesystem publication fault injection remains incomplete. |
+| E12 | Partial | Request limits, loopback checks, timeouts, and inference-slot recovery have regression coverage; slow/incomplete-body and soak behavior remain open. |
+| E13 | Closed for declared API contract | Same-language generation is enforced; cross-language translation is unsupported. |
+| E14 | Partial | Diagnostic UI/API behavior has prior local evidence; delayed/stale-response and full visual integration remain unverified. |
+| Q01 | Open; blocks goal completion | v4.29 passed 1/6 full configs and 37/60 seed-by-bucket checks. Release holdout is sealed; no checkpoint is usable. |
+| G01 | Partial | Linux Python 3.11.17 / PyTorch 2.14.0+cpu suite, compile, dependency, probe, and report regression checks pass. Blank-host bootstrap and a complete dependency lock remain outstanding. |
+| G02 | Closed for v4.29 validation report | Six run/evaluation identities and all denominators are verified; report contains aggregates only and confirms no release test artifacts. |
+| G03 | Updated for v4.29 | Current docs and indexes point to the failed validation gate and preserve v4.27/v4.28 incident history; raw notes remain unchanged. |
+| G04 | Open research gate | No human/native-speaker validation, broad natural-corpus evidence, matched-compute efficacy claim, or TIDE advantage is established. |
+| G05 | External gates remain closed | PhoMT was not used. Phan Rang Cham remains deferred pending dataset-use permission and language/community review. |
+
+Linux reproduction commands for this checkpoint:
+
+```sh
+PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -B -m unittest discover -s tests -q
+.venv/bin/python -B -m compileall -q tide_jepa tests scripts audits/2026-10-02/root_probes.py
+.venv/bin/python -m pip check
+.venv/bin/python -B audits/2026-10-02/root_probes.py --output /tmp/rmit-root-probe-v429-20261007.json
+.venv/bin/python -B -m tide_jepa.pilot evaluate data/pilot/vi-en-ai-v4.29 --evaluation-split validation
+.venv/bin/python -B scripts/summarize_vi_en_validation.py data/pilot/vi-en-ai-v4.29 VI_EN_RESULTS_V4.29_VALIDATION.md
+git diff --check
+```
+
+No PhoMT raw or derived rows were used, printed, or added to versioned reports. No commit or push was made.
+
+## 2026-10-07 v4.30 completion, checker limitation, and current engineering status
+
+All six frozen v4.30 runs completed 29 epochs / 3,248 updates. Protocol, approval, code/runtime/config identities, checkpoint equality, and validation evaluation identities were checked. The frozen validation report recorded 1/6 complete configs and 29/60 seed-by-bucket checks passing. A later train-only negative-control audit found the frozen checker accepted all 1,792 Vietnamese present-progressive references after deleting `đang`, while all 7,168 intact train singles passed. The historical scores remain immutable but are not confirmatory quality evidence. The repaired workspace checker passes all intact train references and rejects all 1,792 progressive deletions; it cannot retroactively validate the frozen protocol. No release holdout output or metric exists. Both the v4.29 and v4.30 release holdouts remain sealed.
+
+The current parallel trainer runs a frozen-checker negative-control preflight before creating a worker pool for train/validation-only review protocols. It therefore rejects the defective frozen v4.30 protocol before launching duplicate training. New confirmatory work requires a fresh reviewed version and protocol. The train-only checkpoint probe on completed v4.29 checkpoints reports exact generation errors in training examples despite very high teacher-forced byte accuracy; source/action/latent interventions affect reference NLL but do not establish JEPA benefit. See [research acceleration](../../RESEARCH_ACCELERATION.md), [checker and checkpoint audit](../2026-10-07/RESEARCH_VALIDATION.md), and [v4.30 status](../../VI_EN_RESULTS_V4.30_STATUS.md).
+
+The full Linux CPU suite passed 140 tests with zero skips. `compileall`, `pip check`, and `git diff --check` passed; runtime was Python 3.11.17 and PyTorch 2.14.0+cpu. The NumPy initialization warning is optional and did not affect tests or probes. E12 and E14 remain partial for slow/incomplete request and stale-response/full-browser integration coverage; G01 remains partial for blank-host bootstrap and fully pinned dependencies. Q01 remains open and blocks goal completion. Human language review, natural-corpus evidence, matched-compute efficacy, PhoMT permission/use, and Cham language/community gates remain external or research dependencies. The AI-reviewed pilot is preliminary and no model is approved as a usable language-output checkpoint.
+
+No PhoMT rows were used, emitted, or committed. Phan Rang Cham remains excluded. No commit or push was made.

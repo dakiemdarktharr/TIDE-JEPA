@@ -16,11 +16,28 @@ sys.path.insert(0, str(PROJECT_ROOT))
 from tide_jepa.pilot import _semantic_frame_flags
 
 
+def _condition_bucket(config, language, task, action):
+    objective = config.get("objective", {})
+    model = config.get("model", {})
+    decoder = "source_pointer" if model.get("source_pointer_decoder", False) else "vocabulary"
+    return (f"{objective.get('mode')}/seed-{config['seed']}/"
+            f"self-feeding-{objective.get('scheduled_sampling_rate', 0):g}/"
+            f"copy-{objective.get('source_copy_weight', 0):g}/"
+            f"aux-{objective.get('latent_objective_weight', 1):g}/"
+            f"language-balance-{objective.get('language_balance_weight', 0):g}/"
+            f"decoder-{decoder}/{language}/{task}/{action}")
+
+
 def diagnose(directory, modes=("tide",), output=None, markdown=None):
     base = Path(directory).resolve()
     statement = json.loads((base / "data_statement.json").read_text(encoding="utf-8"))
     version = statement.get("version")
-    frames = json.loads((base / "semantic_frames.json").read_text(encoding="utf-8"))
+    protocol = json.loads((base / "protocol.json").read_text(encoding="utf-8"))
+    if protocol.get("review_scope") == "train-validation-only":
+        from scripts.diagnose_train_checkpoint import load_review_bundle
+        _, _, frames, _ = load_review_bundle(base)
+    else:
+        frames = json.loads((base / "semantic_frames.json").read_text(encoding="utf-8"))
     results = {}
     for config_path in sorted(base.glob("*-seed-*.json")):
         config = json.loads(config_path.read_text(encoding="utf-8"))
@@ -38,11 +55,7 @@ def diagnose(directory, modes=("tide",), output=None, markdown=None):
                 task = item["task"]
                 frame = frames[item["target_frame"]]
                 semantic = _semantic_frame_flags(item["generated_text"], language, frame)
-                bucket = (f"{config['objective']['mode']}/seed-{seed}/"
-                          f"copy-{config['objective'].get('source_copy_weight', 0):g}/"
-                          f"aux-{config['objective'].get('latent_objective_weight', 1):g}/"
-                          f"decoder-{'source_pointer' if config.get('model', {}).get('source_pointer_decoder', False) else 'vocabulary'}/"
-                          f"{language}/{task}/{item.get('action_key', 'aggregate')}")
+                bucket = _condition_bucket(config, language, task, item.get("action_key", "aggregate"))
                 counts = results.setdefault(bucket, {
                     "examples": 0, "checker_covered": 0,
                     "action_fidelity_pass": 0, "preservation_pass": 0,
@@ -81,8 +94,8 @@ def diagnose(directory, modes=("tide",), output=None, markdown=None):
     }
     summary = {}
     for bucket, counts in results.items():
-        mode, _seed, copy_weight, aux_weight, decoder, language, task, _action = bucket.split("/", 7)
-        key = f"{mode}/{copy_weight}/{aux_weight}/{decoder}/{language}/{task}"
+        mode, _seed, sampling, copy_weight, aux_weight, balance_weight, decoder, language, task, _action = bucket.split("/", 9)
+        key = f"{mode}/{sampling}/{copy_weight}/{aux_weight}/{balance_weight}/{decoder}/{language}/{task}"
         total = summary.setdefault(key, {"examples": 0, "checker_covered": 0,
                                          "action_fidelity_pass": 0, "preservation_pass": 0,
                                          "agent_preserved": 0, "patient_preserved": 0,
@@ -117,7 +130,7 @@ def diagnose(directory, modes=("tide",), output=None, markdown=None):
             "|---|---|---|---:|---:|---:|---:|---:|---:|---:|---:|",
         ]
         for key, counts in sorted(summary.items()):
-            mode, copy_weight, aux_weight, decoder, language, task = key.split("/")
+            mode, sampling, copy_weight, aux_weight, balance_weight, decoder, language, task = key.split("/")
             fidelity_rate = counts['action_fidelity_rate']
             preservation_rate = counts['preservation_rate']
             fidelity = (f"{counts['action_fidelity_pass']}/{counts['checker_covered']} "
@@ -127,7 +140,7 @@ def diagnose(directory, modes=("tide",), output=None, markdown=None):
             rates = [counts[f"{field}_rate"] for field in
                      ("agent_preserved", "patient_preserved", "predicate_preserved", "place_preserved")]
             component_cells = [f"{rate:.1%}" if rate is not None else "n/a" for rate in rates]
-            lines.append(f"| {mode}, copy {copy_weight.removeprefix('copy-')}, aux {aux_weight.removeprefix('aux-')}, {decoder.removeprefix('decoder-')} | {language} | {task} | {counts['examples']} | {counts['checker_covered']}/{counts['examples']} ({counts['checker_coverage_rate']:.1%}) | {fidelity} | {component_cells[0]} | {component_cells[1]} | {component_cells[2]} | {component_cells[3]} | {preservation} |")
+            lines.append(f"| {mode}, self-feeding {sampling.removeprefix('self-feeding-')}, copy {copy_weight.removeprefix('copy-')}, aux {aux_weight.removeprefix('aux-')}, language-balance {balance_weight.removeprefix('language-balance-')}, {decoder.removeprefix('decoder-')} | {language} | {task} | {counts['examples']} | {counts['checker_covered']}/{counts['examples']} ({counts['checker_coverage_rate']:.1%}) | {fidelity} | {component_cells[0]} | {component_cells[1]} | {component_cells[2]} | {component_cells[3]} | {preservation} |")
         lines += [
             "",
             "This component diagnostic does not change the frozen gate or its thresholds. Any follow-up quality experiment must use a fresh reviewed version; the release holdout remains sealed unless the original frozen validation gates pass.",

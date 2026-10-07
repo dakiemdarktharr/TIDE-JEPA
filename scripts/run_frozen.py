@@ -40,18 +40,33 @@ def verify_snapshot(directory):
     return snapshot
 
 
+def load_frozen_package(directory):
+    """Install a verified snapshot once, refusing mixed implementation imports."""
+    snapshot = verify_snapshot(directory)
+    existing = sys.modules.get("tide_jepa")
+    if existing is not None:
+        loaded_files = [getattr(module, "__file__", None) for name, module in sys.modules.items()
+                        if name == "tide_jepa" or name.startswith("tide_jepa.")]
+        if any(not name or not Path(name).resolve().is_relative_to(snapshot) for name in loaded_files):
+            raise RuntimeError("run in a fresh process: another tide_jepa implementation is already loaded")
+        return snapshot
+    if any(name.startswith("tide_jepa.") for name in sys.modules):
+        raise RuntimeError("run in a fresh process: tide_jepa submodules are already loaded")
+    spec = importlib.util.spec_from_file_location(
+        "tide_jepa", snapshot / "__init__.py", submodule_search_locations=[str(snapshot)])
+    package = importlib.util.module_from_spec(spec)
+    sys.modules["tide_jepa"] = package
+    spec.loader.exec_module(package)
+    return snapshot
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("directory", help="pilot directory containing protocol.json")
     parser.add_argument("module", choices=("demo", "infer", "pilot", "experiment"))
     parser.add_argument("arguments", nargs=argparse.REMAINDER)
     args = parser.parse_args()
-    snapshot = verify_snapshot(args.directory)
-    spec = importlib.util.spec_from_file_location(
-        "tide_jepa", snapshot / "__init__.py", submodule_search_locations=[str(snapshot)])
-    package = importlib.util.module_from_spec(spec)
-    sys.modules["tide_jepa"] = package
-    spec.loader.exec_module(package)
+    load_frozen_package(args.directory)
     sys.argv = [f"tide_jepa.{args.module}", *args.arguments]
     runpy.run_module(f"tide_jepa.{args.module}", run_name="__main__")
 
