@@ -1,0 +1,124 @@
+{
+  "checkpoint": "tide-copy-0p0-seed-17",
+  "current_v433_default": {
+    "action_fidelity": true,
+    "allowed_request_scope": "exact approved train source/action combinations",
+    "cross_language_http": 400,
+    "http_status": 200,
+    "latency_seconds": 0.109,
+    "malformed_json_http": 400,
+    "output_length_bytes": 67,
+    "preservation": true,
+    "quality_status": "diagnostic_only",
+    "semantic_checker_covered": true,
+    "source_scope": "approved train-only Vietnamese TIME:PAST example",
+    "test_split_used_for_default": false,
+    "unregistered_source_action_http": 400,
+    "unregistered_source_http": 400,
+    "unsupported_action_http": 400,
+    "valid_utf8": true
+  },
+  "health": {
+    "http_status": 200,
+    "human_validated": false,
+    "quality_status": "diagnostic_only",
+    "validation_gate_status": "pass"
+  },
+  "final_allowlist_smoke": {
+    "approved_train_request_http": 200,
+    "cross_language_http": 400,
+    "unknown_source_http": 400,
+    "unregistered_action_for_known_source_http": 400,
+    "unsupported_action_http": 400
+  },
+  "bounded_http_resilience_smoke": {
+    "sequential_generation_requests": 20,
+    "generation_http_200": 20,
+    "valid_utf8_count": 20,
+    "latency_ms_p50": 97.3,
+    "latency_ms_p95": 123.1,
+    "rss_before_requests_kib": 285356,
+    "rss_after_requests_kib": 303720,
+    "rss_delta_kib": 18364,
+    "memory_measurement_scope": "single in-process loopback smoke; not a benchmark",
+    "incomplete_body_http_400": true,
+    "health_requests_during_incomplete_body": 4,
+    "health_http_200": 4,
+    "health_max_latency_ms": 1.5,
+    "raw_or_generated_text_recorded": false,
+    "long_soak_or_load_test": false
+  },
+  "bounded_repeated_load_extension": {
+    "sequential_requests": 120,
+    "http_200_valid_utf8": 120,
+    "other_statuses": {},
+    "latency_ms_p50": 91.0,
+    "latency_ms_p95": 103.5,
+    "latency_ms_max": 108.2,
+    "concurrent_burst_size": 8,
+    "burst_http_status_counts": {"200": 1, "503": 7},
+    "post_burst_health_http": 200,
+    "quality_status": "diagnostic_only",
+    "raw_or_generated_text_recorded": false,
+    "long_duration_soak": false
+  },
+  "five_minute_loopback_soak": {
+    "duration_seconds": 300,
+    "generation_requests": 3132,
+    "http_200_valid_utf8": 3132,
+    "other_statuses": {},
+    "exceptions": {},
+    "health_checks": 31,
+    "health_http_200": 31,
+    "latency_ms_p50": 94.7,
+    "latency_ms_p95": 108.7,
+    "latency_ms_p99": 116.7,
+    "latency_ms_max": 149.4,
+    "quality_status": "diagnostic_only",
+    "raw_or_generated_text_recorded": false,
+    "longer_duration_or_production_load_test": false
+  },
+  "stale_response_browser_smoke": {
+    "browser": "Codex in-app Chromium",
+    "delay_seconds": 2.0,
+    "edited_form_during_pending_request": true,
+    "original_request_snapshot_preserved": true,
+    "result_marked_stale_visibly": true,
+    "test_only_request_data_retained": false,
+    "temporary_server_stopped": true
+  },
+  "human_validated": false,
+  "initial_stock_ui_default": {
+    "exact_matches_in_v433_corpus": 0,
+    "qualitative_observation": "semantically corrupted output; out-of-corpus input, so this does not estimate in-distribution quality"
+  },
+  "limitations": [
+    "no generalization to unregistered source/action pairs is claimed",
+    "no human bilingual evaluation is present",
+    "naturalness is not validated",
+    "diagnostic-only outputs are not approved for translation or production"
+  ],
+  "phomt_used": false,
+  "pilot_version": "vi-en-ai-v4.33",
+  "preliminary": true,
+  "preview_server_at_handoff": {
+    "bind": "127.0.0.1",
+    "diagnostic_only": true,
+    "scope": "exact train-only source/action allowlist",
+    "stop_with": "Ctrl-C",
+    "url": "http://127.0.0.1:8765"
+  },
+  "preview_server_restarted_for_handoff": true,
+  "raw_or_generated_text_in_report": false,
+  "request_rejections": {
+    "cross_language": 400,
+    "malformed_json": 400,
+    "unknown_source": 400,
+    "unregistered_source_action": 400,
+    "unsupported_action": 400
+  },
+  "schema_version": "v433-demo-smoke-v4",
+  "scope": "loopback-only offline UI; synthetic within-language generation; no raw/generated text retained",
+  "original_smoke_server_stopped": true,
+  "user_preview_server_running_after_final_ui_check": true
+}

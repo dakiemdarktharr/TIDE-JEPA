@@ -1,0 +1,89 @@
+{
+  "alignment_pairs_in_batch": 1,
+  "approval_sha256": "b33298a4f0ea1c7de92a81413f67fbfbaee4c0a39fd782adf072f316290824e7",
+  "cham_used": false,
+  "checkpoint_written": false,
+  "config": "tide-decoder-source_pointer-copy-0p0-seed-17.json",
+  "config_sha256": "27015193ee9ea6fef76e8afb5078572881438e00151cff7db3ad4b7e24311ee2",
+  "diagnostic_script_sha256": "69d2bccb32da21f2c3aece8698cbabbcba838ee1daffd096a9b26607211828bb",
+  "group_id_sha256": "e491ea6a8c0707d05352c699ef4350b51f58c1467524d24f9da671c1a6b364d5",
+  "human_validated": false,
+  "inventory_sha256": "b5d3532da2de6423e3beafd8fa8a5fd4af3c42e953bdd769c859f869cd1f66d4",
+  "phomt_used": false,
+  "pilot_version": "vi-en-ai-v4.32",
+  "protocol_sha256": "c288e9749402282ff27f2279e33ad13b58ee6c96612695ba41711bffcd5b0524",
+  "release_holdout_opened": false,
+  "review_bundle_sha256": "62fe45059d794b2b02091221da9fdad48b9e267a2391703abe21fcc5833f1077",
+  "review_scope": "train-validation-only",
+  "scope": "one complete eight-row single-action event group selected from train only",
+  "seed": 613,
+  "steps": 600,
+  "text_emitted": false,
+  "training_curve": [
+    {
+      "step": 0,
+      "train_semantic": {
+        "action_fidelity_pass": 0,
+        "examples": 8,
+        "patient_preserved": 0,
+        "predicate_preserved": 0,
+        "preservation_pass": 0,
+        "terminated_eos": 8,
+        "valid_utf8": 8
+      }
+    },
+    {
+      "loss": 4.36921,
+      "step": 1,
+      "train_semantic": {
+        "action_fidelity_pass": 0,
+        "examples": 8,
+        "patient_preserved": 0,
+        "predicate_preserved": 0,
+        "preservation_pass": 0,
+        "terminated_eos": 8,
+        "valid_utf8": 8
+      }
+    },
+    {
+      "loss": 0.16324,
+      "step": 100,
+      "train_semantic": {
+        "action_fidelity_pass": 6,
+        "examples": 8,
+        "patient_preserved": 6,
+        "predicate_preserved": 7,
+        "preservation_pass": 6,
+        "terminated_eos": 8,
+        "valid_utf8": 8
+      }
+    },
+    {
+      "loss": 0.01585,
+      "step": 300,
+      "train_semantic": {
+        "action_fidelity_pass": 8,
+        "examples": 8,
+        "patient_preserved": 8,
+        "predicate_preserved": 8,
+        "preservation_pass": 8,
+        "terminated_eos": 8,
+        "valid_utf8": 8
+      }
+    },
+    {
+      "loss": 0.00111,
+      "step": 600,
+      "train_semantic": {
+        "action_fidelity_pass": 8,
+        "examples": 8,
+        "patient_preserved": 8,
+        "predicate_preserved": 8,
+        "preservation_pass": 8,
+        "terminated_eos": 8,
+        "valid_utf8": 8
+      }
+    }
+  ],
+  "validation_rows_scored": false
+}

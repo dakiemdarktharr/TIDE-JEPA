@@ -263,6 +263,9 @@ _V427_AGENTS = (("Tuan Phuc", "Tuấn Phúc"), ("Ngoc Bich", "Ngọc Bích"), ("
 _V428_AGENTS = (("Bao Ngan", "Bảo Ngân"), ("Quoc Bao", "Quốc Bảo"), ("Thao Vy", "Thảo Vy"))
 _V429_AGENTS = (("Duc Anh", "Đức Anh"), ("Ngoc Han", "Ngọc Hân"), ("Minh Kiet", "Minh Kiệt"))
 _V430_AGENTS = (("Thu Ha", "Thu Hà"), ("Tuan Huy", "Tuấn Huy"), ("Lan Anh", "Lan Anh"))
+_V431_AGENTS = (("Mai Anh", "Mai Anh"), ("Quang Minh", "Quang Minh"), ("Bao Tram", "Bảo Trâm"))
+_V432_AGENTS = (("Hai Dang", "Hải Đăng"), ("Nhu Y", "Như Ý"), ("Minh Khoi", "Minh Khôi"))
+_V433_AGENTS = (("Khanh Linh", "Khánh Linh"), ("Duy Khang", "Duy Khang"), ("Thien An", "Thiên An"))
 
 
 def _compose_v44_families():
@@ -1445,7 +1448,7 @@ def _compose_v4x_families(agent_start, split_seed, event_prefix):
               + _V413_AGENTS + _V414_AGENTS + _V415_AGENTS + _V416_AGENTS + _V417_AGENTS
               + _V418_AGENTS + _V419_AGENTS + _V420_AGENTS + _V421_AGENTS + _V422_AGENTS
               + _V423_AGENTS + _V424_AGENTS + _V425_AGENTS + _V426_AGENTS + _V427_AGENTS + _V428_AGENTS
-              + _V429_AGENTS + _V430_AGENTS)
+              + _V429_AGENTS + _V430_AGENTS + _V431_AGENTS + _V432_AGENTS + _V433_AGENTS)
     remaining = {(agent, verb, patient)
                  for agent in range(agent_start, agent_start + 3) for verb in range(8) for patient in range(8)}
     train = []
@@ -1513,6 +1516,9 @@ FAMILIES_V427 = _compose_v4x_families(62, 20261030, "compose427")
 FAMILIES_V428 = _compose_v4x_families(65, 20261031, "compose428")
 FAMILIES_V429 = _compose_v4x_families(68, 20261032, "compose429")
 FAMILIES_V430 = _compose_v4x_families(71, 20261033, "compose430")
+FAMILIES_V431 = _compose_v4x_families(74, 20261034, "compose431")
+FAMILIES_V432 = _compose_v4x_families(77, 20261035, "compose432")
+FAMILIES_V433 = _compose_v4x_families(80, 20261036, "compose433")
 
 
 def author_seed_v4(output_dir, *, version="v4"):
@@ -1532,9 +1538,12 @@ def author_seed_v4(output_dir, *, version="v4"):
                   FAMILIES_V44 if version == "v4.4" else
                   FAMILIES_V45 if version == "v4.5" else
                   FAMILIES_V414 if version == "v4.14" else
+                  FAMILIES_V433 if version == "v4.33" else
+                  FAMILIES_V432 if version == "v4.32" else
+                  FAMILIES_V431 if version == "v4.31" else
                   FAMILIES_V430 if version == "v4.30" else
                   FAMILIES_V429 if version == "v4.29" else
-                  FAMILIES_V428 if version in ("v4.28", "v4.29", "v4.30") else
+                  FAMILIES_V428 if version in ("v4.28", "v4.29", "v4.30", "v4.31", "v4.32", "v4.33") else
                   FAMILIES_V427 if version == "v4.27" else
                   FAMILIES_V426 if version == "v4.26" else
                   FAMILIES_V425 if version == "v4.25" else
@@ -1571,26 +1580,26 @@ def author_seed_v4(output_dir, *, version="v4"):
                          "predicate_en_present": en_present, "predicate_en_past": en_past,
                          "patient_en": en_patient, "patient_vi": vi_patient,
                          "context": "same event; requested action changes time or polarity only"}
-                progressive_vi = (version in ("v4.23", "v4.24", "v4.25", "v4.26", "v4.27", "v4.28", "v4.29", "v4.30")
+                progressive_vi = (version in ("v4.23", "v4.24", "v4.25", "v4.26", "v4.27", "v4.28", "v4.29", "v4.30", "v4.31", "v4.32", "v4.33")
                                   and (not negative or version != "v4.23"))
                 frame["predicate_vi_present"] = (("đang " if progressive_vi else "")
                                                    + ("không " if negative else "") + vi_verb)
-                if version in ("v4.14", "v4.15", "v4.16", "v4.17", "v4.18", "v4.19", "v4.20", "v4.21", "v4.22", "v4.23", "v4.24", "v4.25", "v4.26", "v4.27", "v4.28", "v4.29", "v4.30"):
+                if version in ("v4.14", "v4.15", "v4.16", "v4.17", "v4.18", "v4.19", "v4.20", "v4.21", "v4.22", "v4.23", "v4.24", "v4.25", "v4.26", "v4.27", "v4.28", "v4.29", "v4.30", "v4.31", "v4.32", "v4.33"):
                     frame.update({"place_en": "in the workshop", "place_vi": "trong xưởng",
                                   "context": "same event in the same workshop; only time or polarity changes"})
-                if version in ("v4.6", "v4.7", "v4.8", "v4.9", "v4.10", "v4.11", "v4.12", "v4.13", "v4.14", "v4.15", "v4.16", "v4.17", "v4.18", "v4.19", "v4.20", "v4.21", "v4.22", "v4.23", "v4.24", "v4.25", "v4.26", "v4.27", "v4.28", "v4.29", "v4.30"):
+                if version in ("v4.6", "v4.7", "v4.8", "v4.9", "v4.10", "v4.11", "v4.12", "v4.13", "v4.14", "v4.15", "v4.16", "v4.17", "v4.18", "v4.19", "v4.20", "v4.21", "v4.22", "v4.23", "v4.24", "v4.25", "v4.26", "v4.27", "v4.28", "v4.29", "v4.30", "v4.31", "v4.32", "v4.33"):
                     frame["predicate_en_progressive"] = _V46_PROGRESSIVE[en_base]
                 frames[f"{group}-state-{index}"] = frame
             path_edges = ([(0, 2, "TIME", "PAST"), (2, 3, "POLARITY", "NEGATIVE")]
                           if split == "test" and version == "v4.17" else
                           [(0, 1, "POLARITY", "NEGATIVE"), (1, 3, "TIME", "PAST")])
             for language in ("en", "vi"):
-                for variant in range(4 if version in ("v4.14", "v4.15", "v4.16", "v4.17", "v4.18", "v4.19", "v4.20", "v4.21", "v4.22", "v4.23", "v4.24", "v4.25", "v4.26", "v4.27", "v4.28", "v4.29", "v4.30") else 2):
+                for variant in range(4 if version in ("v4.14", "v4.15", "v4.16", "v4.17", "v4.18", "v4.19", "v4.20", "v4.21", "v4.22", "v4.23", "v4.24", "v4.25", "v4.26", "v4.27", "v4.28", "v4.29", "v4.30", "v4.31", "v4.32", "v4.33") else 2):
                     state_forms_v4_6 = None
-                    if version in ("v4.6", "v4.7", "v4.8", "v4.9", "v4.10", "v4.11", "v4.12", "v4.13", "v4.14", "v4.15", "v4.16", "v4.17", "v4.18", "v4.19", "v4.20", "v4.21", "v4.22", "v4.23", "v4.24", "v4.25", "v4.26", "v4.27", "v4.28", "v4.29", "v4.30"):
+                    if version in ("v4.6", "v4.7", "v4.8", "v4.9", "v4.10", "v4.11", "v4.12", "v4.13", "v4.14", "v4.15", "v4.16", "v4.17", "v4.18", "v4.19", "v4.20", "v4.21", "v4.22", "v4.23", "v4.24", "v4.25", "v4.26", "v4.27", "v4.28", "v4.29", "v4.30", "v4.31", "v4.32", "v4.33"):
                         progressive = _V46_PROGRESSIVE[en_base]
-                        vi_now_verb = f"đang {vi_verb}" if version in ("v4.23", "v4.24", "v4.25", "v4.26", "v4.27", "v4.28", "v4.29", "v4.30") else vi_verb
-                        vi_now_negative = (f"đang không {vi_verb}" if version in ("v4.24", "v4.25", "v4.26", "v4.27", "v4.28", "v4.29", "v4.30")
+                        vi_now_verb = f"đang {vi_verb}" if version in ("v4.23", "v4.24", "v4.25", "v4.26", "v4.27", "v4.28", "v4.29", "v4.30", "v4.31", "v4.32", "v4.33") else vi_verb
+                        vi_now_negative = (f"đang không {vi_verb}" if version in ("v4.24", "v4.25", "v4.26", "v4.27", "v4.28", "v4.29", "v4.30", "v4.31", "v4.32", "v4.33")
                                            else f"không {vi_verb}")
                         state_forms_v4_6 = {
                             "en": ((f"Right now, {en_agent} is {progressive} {en_patient}.",
@@ -1602,7 +1611,7 @@ def author_seed_v4(output_dir, *, version="v4"):
                                    (f"Bây giờ, {vi_agent} không {vi_verb} {vi_patient}.",
                                     f"{vi_agent} không {vi_verb} {vi_patient} bây giờ.")),
                         }
-                        if version in ("v4.14", "v4.15", "v4.16", "v4.17", "v4.18", "v4.19", "v4.20", "v4.21", "v4.22", "v4.23", "v4.24", "v4.25", "v4.26", "v4.27", "v4.28", "v4.29", "v4.30"):
+                        if version in ("v4.14", "v4.15", "v4.16", "v4.17", "v4.18", "v4.19", "v4.20", "v4.21", "v4.22", "v4.23", "v4.24", "v4.25", "v4.26", "v4.27", "v4.28", "v4.29", "v4.30", "v4.31", "v4.32", "v4.33"):
                             state_forms_v4_6 = {
                                 "en": ((f"In the workshop, {en_agent} is {progressive} {en_patient} right now.",
                                         f"Right now, {en_agent} is {progressive} {en_patient} in the workshop.",
@@ -1636,7 +1645,7 @@ def author_seed_v4(output_dir, *, version="v4"):
                                         f"Hôm qua, {vi_agent} không {vi_verb} {vi_patient} trong xưởng.",
                                         f"{vi_agent} không {vi_verb} {vi_patient} hôm qua, trong xưởng.",
                                         f"{vi_agent} không {vi_verb} {vi_patient} trong xưởng hôm qua."))}
-                    if version in ("v4.14", "v4.15", "v4.16", "v4.17", "v4.18", "v4.19", "v4.20", "v4.21", "v4.22", "v4.23", "v4.24", "v4.25", "v4.26", "v4.27", "v4.28", "v4.29", "v4.30"):
+                    if version in ("v4.14", "v4.15", "v4.16", "v4.17", "v4.18", "v4.19", "v4.20", "v4.21", "v4.22", "v4.23", "v4.24", "v4.25", "v4.26", "v4.27", "v4.28", "v4.29", "v4.30", "v4.31", "v4.32", "v4.33"):
                         realized = [state_forms_v4_6[language][state_index][variant]
                                     for state_index in range(4)]
                     else:
@@ -1649,7 +1658,7 @@ def author_seed_v4(output_dir, *, version="v4"):
                                       "vi": (f"Hôm qua, {vi_agent} đã {vi_verb} {vi_patient}.", f"{vi_agent} đã {vi_verb} {vi_patient} hôm qua.")},
                                      {"en": (f"Yesterday, {en_agent} did not {en_base} {en_patient}.", f"{en_agent} did not {en_base} {en_patient} yesterday."),
                                       "vi": (f"Hôm qua, {vi_agent} không {vi_verb} {vi_patient}.", f"{vi_agent} không {vi_verb} {vi_patient} hôm qua.")}]]
-                    if state_forms_v4_6 is not None and version not in ("v4.14", "v4.15", "v4.16", "v4.17", "v4.18", "v4.19", "v4.20", "v4.21", "v4.22", "v4.23", "v4.24", "v4.25", "v4.26", "v4.27", "v4.28", "v4.29", "v4.30"):
+                    if state_forms_v4_6 is not None and version not in ("v4.14", "v4.15", "v4.16", "v4.17", "v4.18", "v4.19", "v4.20", "v4.21", "v4.22", "v4.23", "v4.24", "v4.25", "v4.26", "v4.27", "v4.28", "v4.29", "v4.30", "v4.31", "v4.32", "v4.33"):
                         realized[0] = state_forms_v4_6[language][0][variant]
                         realized[1] = state_forms_v4_6[language][1][variant]
                     for edge_index, (source, target, kind, value) in enumerate(single_edges + path_edges):
@@ -1675,6 +1684,8 @@ def author_seed_v4(output_dir, *, version="v4"):
                                            "relation": "same_event"})
     output.mkdir(parents=True)
     (output / "corpus.draft.jsonl").write_text("".join(json.dumps(row.to_dict(), ensure_ascii=False) + "\n" for row in rows), encoding="utf-8")
+    review_rows = [row for row in rows if groups[row.split_group_id] != "test"]
+    reviewed_records_sha256 = dataset_fingerprint(review_rows)
     artifacts = {
         "inventory.draft.json": {"actions": actions, "approved_by_language": {"en": [], "vi": [], "cham_phan_rang": []},
                                   "proposed_by_language": {"en": actions, "vi": actions}},
@@ -1685,14 +1696,16 @@ def author_seed_v4(output_dir, *, version="v4"):
                                 "event_families": len(groups), "records": len(rows),
                                 **({"review_scope": "train-validation-only",
                                     "reviewed_records": sum(groups[row.split_group_id] != "test" for row in rows)}
-                                   if version in ("v4.28", "v4.29", "v4.30") else {}),
+                                   if version in ("v4.28", "v4.29", "v4.30", "v4.31", "v4.32", "v4.33") else {}),
                                 **({"review_bundle_dir": "review_bundle"}
-                                   if version in ("v4.29", "v4.30") else {}),
+                                   if version in ("v4.29", "v4.30", "v4.31", "v4.32", "v4.33") else {}),
                                 **({"context_checker_scope": "The shared workshop context is checked as the declared English/Vietnamese place marker only; broader discourse context is not evaluated.",
                                     "action_frame_mapping": {"TIME": {"NOW": "target frame time is present", "PAST": "target frame time is past"},
                                                              "POLARITY": {"POSITIVE": "target frame polarity is positive", "NEGATIVE": "target frame polarity is negative"}}}
-                                   if version in ("v4.29", "v4.30") else {}),
-                                "draft_sha256": dataset_fingerprint(rows),
+                                   if version in ("v4.29", "v4.30", "v4.31", "v4.32", "v4.33") else {}),
+                                "draft_sha256": (reviewed_records_sha256 if version in ("v4.32", "v4.33")
+                                                 else dataset_fingerprint(rows)),
+                                **({"draft_hash_scope": "train-validation-only"} if version in ("v4.32", "v4.33") else {}),
                                 "split_policy": ("20 train, 6 validation, 6 release-holdout event families, fixed before model selection; fresh families not used in prior versions"
                                                  if version == "v4.2" else
                                                  "20 train, 6 validation, 6 release-holdout event combinations; every agent, verb lemma and patient phrase occurs in training; all combinations are frame/group-disjoint; test path order is held out"
@@ -1749,8 +1762,14 @@ def author_seed_v4(output_dir, *, version="v4"):
                                                  if version == "v4.29" else
                                                  "112/40/40 combinations from agents 71–73 × eight verbs × eight patients on a fresh split, with the shared four-form grammar and action order; train/validation-only review package and sealed release holdout for a TIDE vocabulary-versus-source-pointer decoder comparison at source-copy weight 0"
                                                  if version == "v4.30" else
+                                                 "112/40/40 combinations from fresh agents 77–79 × eight verbs × eight patients; deterministic split seed 20261035, shared four-form grammar/action order; train/validation-only review bundle and fresh sealed release holdout for a three-seed TIDE vocabulary versus source-pointer decoder comparison"
+                                                 if version == "v4.32" else
+                                                 "112/40/40 combinations from fresh agents 80–82 × eight verbs × eight patients; deterministic split seed 20261036, shared four-form grammar/action order; train/validation-only review bundle and fresh sealed release holdout for a three-seed 58-epoch TIDE versus token-only objective comparison"
+                                                 if version == "v4.33" else
+                                                 "112/40/40 combinations from fresh agents 74–76 × eight verbs × eight patients; deterministic split seed 20261034, shared four-form grammar/action order; isolated train/validation review bundle and fresh sealed release holdout for a three-seed TIDE versus token-only objective comparison"
+                                                 if version == "v4.31" else
                                                  "12 train, 4 validation, 4 release-holdout event families, fixed before model selection; new events not used in v3"),
-                                "surface_realizations_per_state": 4 if version in ("v4.14", "v4.15", "v4.16", "v4.17", "v4.18", "v4.19", "v4.20", "v4.21", "v4.22", "v4.23", "v4.24", "v4.25", "v4.26", "v4.27", "v4.28", "v4.29", "v4.30") else 2,
+                                "surface_realizations_per_state": 4 if version in ("v4.14", "v4.15", "v4.16", "v4.17", "v4.18", "v4.19", "v4.20", "v4.21", "v4.22", "v4.23", "v4.24", "v4.25", "v4.26", "v4.27", "v4.28", "v4.29", "v4.30", "v4.31", "v4.32", "v4.33") else 2,
                                 **({"transition_weighting_note": (
                                     "There are 3072 duplicated path-step rows across the full split: 1792 in "
                                     "training, 640 in validation, and 640 in the sealed release holdout. Each "
@@ -1765,7 +1784,18 @@ def author_seed_v4(output_dir, *, version="v4"):
                                     if version == "v4.17" else
                                     "The representation is fixed identically across conditions; results describe a "
                                     "path-enriched training distribution, not uniform weighting over unique transitions."))}
-                                    if version in ("v4.15", "v4.16", "v4.17", "v4.23", "v4.24", "v4.25", "v4.26", "v4.27", "v4.28", "v4.29", "v4.30") else {}),
+                                    if version in ("v4.15", "v4.16", "v4.17", "v4.23", "v4.24", "v4.25", "v4.26", "v4.27", "v4.28", "v4.29", "v4.30", "v4.31", "v4.32", "v4.33") else {}),
+                                **({"reviewed_records_sha256": reviewed_records_sha256,
+                                    "quality_gate_scope_note": "held_out_path buckets refer to held-out compositional paths inside the train/validation corpus; they are scored on validation and do not refer to the sealed release-holdout split."}
+                                    if version in ("v4.32", "v4.33") else {}),
+                                **({"quality_thresholds": {"valid_unicode_rate": 1.0,
+                                                            "semantic_checker_coverage_rate": 1.0,
+                                                            "single_action_action_fidelity_rate": 0.9,
+                                                            "single_action_preservation_rate": 0.9,
+                                                            "held_out_path_action_fidelity_rate": 0.8,
+                                                            "held_out_path_preservation_rate": 0.8,
+                                                            "scope": "each language/action bucket using the narrow synthetic frame checker"}}
+                                    if version in ("v4.32", "v4.33") else {}),
                                 **({"registered_hypotheses": {
                                     "source_copy_supervision": "Within each TIDE auxiliary multiplier, weight 1.5 is hypothesized to improve source-slot preservation versus weight 0 without reducing action fidelity by more than 5 percentage points.",
                                     "tide_auxiliary": "At fixed source-copy weight, TIDE auxiliary multiplier 0.1 is hypothesized to improve the joint action-and-preservation outcome versus multiplier 0.",
@@ -1818,6 +1848,26 @@ def author_seed_v4(output_dir, *, version="v4"):
                                      "interpretation": "Three seeds on a fresh synthetic corpus support only a preliminary optimization diagnostic, not human or natural-language efficacy."}}
                                      if version in ("v4.27", "v4.28", "v4.29") else
                                     {"registered_hypotheses": {
+                                     "source_pointer_preservation": "At fixed TIDE objective, source-copy weight 0, corpus, split, seeds, training schedule, and validation protocol, a source-pointer mixture decoder is hypothesized to improve source-slot preservation over the vocabulary-only decoder without reducing action fidelity by more than five percentage points.",
+                                     "compute_interpretation": "The pointer decoder adds a source-memory distribution and learned mixture gate; report updates, tokens, wall time, and throughput. This is not a matched-FLOP comparison.",
+                                    "primary_quality_gate": "Only the preregistered TIDE source-pointer condition is primary for quality gating; the TIDE vocabulary decoder is a diagnostic control. Every primary seed and language/action bucket must pass all frozen thresholds before the release holdout can be opened.",
+                                    "interpretation": "This fresh synthetic three-seed comparison is preliminary; prior failures remain preserved and no human or natural-language efficacy is claimed."}}
+                                    if version == "v4.32" else
+                                    {"registered_hypotheses": {
+                                     "extended_optimization": "At fixed architecture, fresh corpus/split, task supervision, optimizer, batch size, and primary TIDE objective, 58 fixed epochs are hypothesized to improve the frozen validation action-fidelity/preservation gate over earlier 29-epoch descriptive pilots.",
+                                     "tide_vs_token_only": "The registered token-only arm shares architecture, corpus, split, text/path supervision, seeds, and fixed update count; TIDE is hypothesized to improve action-conditioned preservation without reducing action fidelity by more than five percentage points.",
+                                     "checkpoint_selection": "Every run uses the preregistered final epoch; validation loss does not select the checkpoint.",
+                                     "compute_interpretation": "All arms receive the same examples and updates, but token-only omits latent losses and uses less compute. Record wall time and throughput; this is not a matched-FLOP comparison.",
+                                     "primary_quality_gate": "Every primary TIDE seed and language/action bucket must pass frozen Unicode, action-fidelity, and preservation thresholds before the release holdout can be opened. Token-only is a registered control and does not relax the gate.",
+                                     "interpretation": "Fresh AI-authored synthetic evidence is preliminary and cannot establish human or natural-language efficacy."}}
+                                    if version == "v4.33" else
+                                    {"registered_hypotheses": {
+                                     "jepa_objective_vs_token_only": "At fixed architecture, corpus, train/validation split, byte-level generation head, supervision, optimizer, batch, and update count, TIDE is hypothesized to improve action-conditioned preservation over the token-only objective without lowering action fidelity by more than five percentage points.",
+                                     "compute_interpretation": "Both arms use the same architecture, examples, optimizer, and fixed updates. Token-only omits latent JEPA losses and therefore uses less compute; report per-run wall time and throughput. This is not a matched-FLOP claim.",
+                                     "primary_quality_gate": "Every TIDE seed and language/action bucket must pass the frozen Unicode, action-fidelity, and preservation thresholds before the release holdout can be opened. Token-only is a registered control and does not relax the primary gate.",
+                                     "interpretation": "Fresh synthetic three-seed evidence is preliminary and cannot establish human or natural-language efficacy."}}
+                                    if version == "v4.31" else
+                                    {"registered_hypotheses": {
                                      "source_pointer_preservation": "At fixed TIDE objective, source-copy weight 0, corpus, split, and updates, a source-pointer decoder is hypothesized to improve source-slot preservation over the vocabulary decoder without reducing action fidelity by more than five percentage points.",
                                      "compute_interpretation": "The pointer decoder adds a source-memory distribution and learned mixture gate; report updates, tokens, wall time, and throughput. This is not a matched-FLOP comparison.",
                                      "primary_quality_gate": "Every decoder condition, seed, and language/action bucket must pass the frozen Unicode, action-fidelity, and preservation thresholds before the release holdout can be opened.",
@@ -1829,9 +1879,8 @@ def author_seed_v4(output_dir, *, version="v4"):
     }
     for name, value in artifacts.items():
         (output / name).write_text(json.dumps(value, ensure_ascii=False, sort_keys=True, indent=2) + "\n", encoding="utf-8")
-    if version in ("v4.29", "v4.30"):
+    if version in ("v4.29", "v4.30", "v4.31", "v4.32", "v4.33"):
         import hashlib
-        review_rows = [row for row in rows if groups[row.split_group_id] != "test"]
         review_record_ids = {row.record_id for row in review_rows}
         review_frame_ids = {frame for row in review_rows for frame in (row.source_frame_id, row.target_frame_id)}
         review_path_ids = {row.path_id for row in review_rows if row.path_id is not None}
@@ -1864,12 +1913,25 @@ def author_seed_v4(output_dir, *, version="v4"):
             json.dumps({"version": f"vi-en-ai-{version}", "source": "original AI-authored synthetic pilot",
                         "phomt_used": False, "human_validated": False,
                         "review_scope": "train-validation-only", "reviewed_records": len(review_rows),
+                        **({"draft_sha256": reviewed_records_sha256,
+                            "draft_hash_scope": "train-validation-only"} if version in ("v4.32", "v4.33") else {}),
                         "languages": ["en", "vi"],
                         "draft_stage": "all records remain pending until both preliminary AI reviews and adjudication approve freeze",
                         "action_frame_mapping": {"TIME": {"NOW": "target frame time is present", "PAST": "target frame time is past"},
                                                  "POLARITY": {"POSITIVE": "target frame polarity is positive", "NEGATIVE": "target frame polarity is negative"}},
                         "standalone_records": "Rows with path_id=null and path_step=null are single-edge records; composed-path rows have path_step 0 or 1 and a path_id. Null path fields are intentional.",
-                        "context_checker_scope": "The shared workshop context is checked as the declared English/Vietnamese place marker only; broader discourse context is not evaluated."}, ensure_ascii=False, sort_keys=True, indent=2) + "\n",
+                        "context_checker_scope": "The shared workshop context is checked as the declared English/Vietnamese place marker only; broader discourse context is not evaluated.",
+                        **({"reviewed_records_sha256": reviewed_records_sha256,
+                            "quality_gate_scope_note": "held_out_path buckets refer to held-out compositional paths inside the train/validation corpus; they are scored on validation and do not refer to the sealed release-holdout split."}
+                           if version in ("v4.32", "v4.33") else {}),
+                        **({"quality_thresholds": {"valid_unicode_rate": 1.0,
+                                                    "semantic_checker_coverage_rate": 1.0,
+                                                    "single_action_action_fidelity_rate": 0.9,
+                                                    "single_action_preservation_rate": 0.9,
+                                                    "held_out_path_action_fidelity_rate": 0.8,
+                                                    "held_out_path_preservation_rate": 0.8,
+                                                    "scope": "each language/action bucket using the narrow synthetic frame checker"}}
+                           if version in ("v4.32", "v4.33") else {})}, ensure_ascii=False, sort_keys=True, indent=2) + "\n",
             encoding="utf-8")
         bundle_hashes = {path.name: hashlib.sha256(path.read_bytes()).hexdigest()
                          for path in sorted(bundle.iterdir()) if path.is_file()}
@@ -1889,7 +1951,7 @@ def author_seed_v4(output_dir, *, version="v4"):
 def main():
     parser = argparse.ArgumentParser(description="Author a pending original synthetic Vi–En pilot for review")
     parser.add_argument("output_dir")
-    parser.add_argument("--pilot-version", choices=("v3", "v4", "v4.1", "v4.2", "v4.3", "v4.4", "v4.5", "v4.6", "v4.7", "v4.8", "v4.9", "v4.10", "v4.11", "v4.12", "v4.13", "v4.14", "v4.15", "v4.16", "v4.17", "v4.18", "v4.19", "v4.20", "v4.21", "v4.22", "v4.23", "v4.24", "v4.25", "v4.26", "v4.27", "v4.28", "v4.29", "v4.30"), default="v3")
+    parser.add_argument("--pilot-version", choices=("v3", "v4", "v4.1", "v4.2", "v4.3", "v4.4", "v4.5", "v4.6", "v4.7", "v4.8", "v4.9", "v4.10", "v4.11", "v4.12", "v4.13", "v4.14", "v4.15", "v4.16", "v4.17", "v4.18", "v4.19", "v4.20", "v4.21", "v4.22", "v4.23", "v4.24", "v4.25", "v4.26", "v4.27", "v4.28", "v4.29", "v4.30", "v4.31", "v4.32", "v4.33"), default="v3")
     args = parser.parse_args()
     result = (author_seed(args.output_dir) if args.pilot_version == "v3"
               else author_seed_v4(args.output_dir, version=args.pilot_version))

@@ -108,6 +108,7 @@ def freeze_pilot(directory, *, epochs=40, seeds=(17, 23, 41), model_width=32,
                  condition_modes=None, condition_source_copy_weights=None,
                  condition_latent_objective_weights=None, condition_transition_balances=None,
                  condition_source_pointer_decoder_modes=None,
+                 primary_source_pointer_decoder_modes=None,
                  condition_scheduled_sampling_rates=None,
                  condition_language_balance_weights=None,
                  checkpoint_selection_policy="validation_loss", compute_source_copy_term=False):
@@ -146,7 +147,10 @@ def freeze_pilot(directory, *, epochs=40, seeds=(17, 23, 41), model_width=32,
     transition_balances = (tuple(condition_transition_balances)
                            if condition_transition_balances is not None else ("row_uniform",))
     pointer_decoder_modes = (tuple(condition_source_pointer_decoder_modes)
-                              if condition_source_pointer_decoder_modes is not None else ("vocabulary",))
+                             if condition_source_pointer_decoder_modes is not None else ("vocabulary",))
+    primary_pointer_decoder_modes = (tuple(primary_source_pointer_decoder_modes)
+                                     if primary_source_pointer_decoder_modes is not None
+                                     else pointer_decoder_modes)
     sampling_rates = (tuple(condition_scheduled_sampling_rates)
                       if condition_scheduled_sampling_rates is not None else (0.0,))
     language_balance_weights = (tuple(condition_language_balance_weights)
@@ -169,6 +173,10 @@ def freeze_pilot(directory, *, epochs=40, seeds=(17, 23, 41), model_width=32,
     if (not pointer_decoder_modes or len(set(pointer_decoder_modes)) != len(pointer_decoder_modes)
             or any(value not in ("vocabulary", "source_pointer") for value in pointer_decoder_modes)):
         raise ValueError("condition source-pointer decoder modes must be unique registered modes")
+    if (not primary_pointer_decoder_modes
+            or len(set(primary_pointer_decoder_modes)) != len(primary_pointer_decoder_modes)
+            or not set(primary_pointer_decoder_modes) <= set(pointer_decoder_modes)):
+        raise ValueError("primary source-pointer decoder modes must be a nonempty subset of registered conditions")
     if (not sampling_rates or len(set(sampling_rates)) != len(sampling_rates)
             or any(not isinstance(value, (int, float)) or isinstance(value, bool)
                    or not math.isfinite(value) or not 0.0 <= value < 1.0
@@ -234,13 +242,22 @@ def freeze_pilot(directory, *, epochs=40, seeds=(17, 23, 41), model_width=32,
         "v4.28": "tide_jepa/pilot_seed.py:original-ai-authored-v4.28",
         "v4.29": "tide_jepa/pilot_seed.py:original-ai-authored-v4.29",
         "v4.30": "tide_jepa/pilot_seed.py:original-ai-authored-v4.30",
+        "v4.31": "tide_jepa/pilot_seed.py:original-ai-authored-v4.31",
+        "v4.32": "tide_jepa/pilot_seed.py:original-ai-authored-v4.32",
+        "v4.33": "tide_jepa/pilot_seed.py:original-ai-authored-v4.33",
     }.get(version)
     if expected_provenance is None or any(r.provenance_ref != expected_provenance
            or r.license_ref != "original-ai-authored-internal-research; no-PhoMT-content" for r in rows):
         raise ValueError("this gate refuses non-original corpus provenance or license references")
     if statement.get("phomt_used") is not False or statement.get("human_validated") is not False:
         raise ValueError("this workflow is for the original AI-authored preliminary pilot only")
-    if statement.get("draft_sha256") != draft_sha or statement.get("records") != len(rows):
+    if statement.get("records") != len(rows):
+        raise ValueError("data statement record count differs from the draft corpus")
+    if version in {"v4.32", "v4.33"}:
+        if (statement.get("draft_hash_scope") != "train-validation-only"
+                or statement.get("draft_sha256") != statement.get("reviewed_records_sha256")):
+            raise ValueError("scoped draft fingerprint must identify only the train/validation review scope")
+    elif statement.get("draft_sha256") != draft_sha:
         raise ValueError("data statement differs from the draft corpus")
     reviewed_hashes = {name: _hash_file(base / name) for name in REVIEWED_ARTIFACTS}
     frames = _read(base / "semantic_frames.draft.json")
@@ -255,7 +272,8 @@ def freeze_pilot(directory, *, epochs=40, seeds=(17, 23, 41), model_width=32,
     if review_scope not in {"all-splits", "train-validation-only"} or expected_review_count != expected_scope_count:
         raise ValueError("data statement review scope/count does not match the frozen split")
     review_bundle_sha256 = None
-    if statement.get("version") in {"vi-en-ai-v4.29", "vi-en-ai-v4.30"}:
+    review_draft_sha = draft_sha
+    if statement.get("version") in {"vi-en-ai-v4.29", "vi-en-ai-v4.30", "vi-en-ai-v4.31", "vi-en-ai-v4.32", "vi-en-ai-v4.33"}:
         bundle = base / statement.get("review_bundle_dir", "review_bundle")
         manifest_path = bundle / "manifest.json"
         if not manifest_path.is_file():
@@ -274,6 +292,22 @@ def freeze_pilot(directory, *, epochs=40, seeds=(17, 23, 41), model_width=32,
                 or any(group not in scoped_groups or scoped_groups[group] == "test"
                        for group in (row["split_group_id"] for row in scoped_rows))):
             raise ValueError("review bundle contains records outside train/validation")
+        if statement.get("version") in {"vi-en-ai-v4.32", "vi-en-ai-v4.33"}:
+            scoped_ids = {row["record_id"] for row in scoped_rows}
+            scoped_records = [row for row in rows if row.record_id in scoped_ids]
+            bundle_statement = _read(bundle / "statement.json")
+            scope_fingerprint = dataset_fingerprint(scoped_records)
+            if (len(scoped_records) != expected_review_count
+                    or statement.get("reviewed_records_sha256") != scope_fingerprint
+                    or bundle_statement.get("reviewed_records_sha256") != scope_fingerprint):
+                raise ValueError("train/validation review-scope fingerprint does not match")
+            if not statement.get("quality_thresholds") or not statement.get("quality_gate_scope_note"):
+                raise ValueError("scoped quality thresholds and their validation scope must be registered")
+            if bundle_statement.get("draft_sha256") != scope_fingerprint:
+                raise ValueError("review-scope draft fingerprint does not match")
+            review_draft_sha = scope_fingerprint
+            reviewed_hashes = {name: _hash_file(bundle / name)
+                               for name in bundle_manifest.get("files_sha256", {})}
         review_bundle_sha256 = _hash_file(manifest_path)
     reviews = [_read(base / name) for name in ("review-a.json", "review-b.json")]
     if len({r.get("reviewer_id") for r in reviews}) != 2:
@@ -281,7 +315,7 @@ def freeze_pilot(directory, *, epochs=40, seeds=(17, 23, 41), model_width=32,
     pending_adjudication = []
     for review in reviews:
         if (review.get("reviewer_type") != "AI" or review.get("decision") not in ("approve", "needs-adjudication")
-                or review.get("draft_sha256") != draft_sha or review.get("rows_checked") != expected_review_count
+                or review.get("draft_sha256") != review_draft_sha or review.get("rows_checked") != expected_review_count
                 or review.get("artifact_sha256") != reviewed_hashes
                 or (review_bundle_sha256 is not None
                     and review.get("review_bundle_sha256") != review_bundle_sha256)):
@@ -289,7 +323,7 @@ def freeze_pilot(directory, *, epochs=40, seeds=(17, 23, 41), model_width=32,
         if review["decision"] == "needs-adjudication":
             pending_adjudication.append(review["reviewer_id"])
     adjudication = _read(base / "adjudication.json")
-    if (adjudication.get("decision") != "approve" or adjudication.get("draft_sha256") != draft_sha
+    if (adjudication.get("decision") != "approve" or adjudication.get("draft_sha256") != review_draft_sha
             or adjudication.get("human_validated") is not False):
         raise ValueError("preliminary AI adjudication is required")
     if pending_adjudication and (
@@ -311,7 +345,8 @@ def freeze_pilot(directory, *, epochs=40, seeds=(17, 23, 41), model_width=32,
                   "v4.24": 20261027, "v4.25": 20261028,
                   "v4.26": 20261029, "v4.27": 20261030,
                   "v4.28": 20261031, "v4.29": 20261032,
-                  "v4.30": 20261033}.get(version, 20261001)
+                  "v4.30": 20261033, "v4.31": 20261034,
+                  "v4.32": 20261035, "v4.33": 20261036}.get(version, 20261001)
     manifest = SplitManifest(dataset_fingerprint(approved_rows), split_seed, fractions, groups,
                              {name: tuple(sorted(r.record_id for r in rows if groups[r.split_group_id] == name))
                               for name in ("train", "validation", "test")})
@@ -442,9 +477,9 @@ def freeze_pilot(directory, *, epochs=40, seeds=(17, 23, 41), model_width=32,
                                      **({"release_holdout_scope": (
                                          "The release holdout uses the same ordered action paths as train and validation; "
                                          "it probes fresh held-out factor combinations only and does not add an action-order shift.")}
-                                        if version in ("v4.18", "v4.19", "v4.20", "v4.21", "v4.22", "v4.23", "v4.24", "v4.25", "v4.26", "v4.27", "v4.28", "v4.29", "v4.30") else {}),
+                                        if version in ("v4.18", "v4.19", "v4.20", "v4.21", "v4.22", "v4.23", "v4.24", "v4.25", "v4.26", "v4.27", "v4.28", "v4.29", "v4.30", "v4.31", "v4.32", "v4.33") else {}),
                                      **({"registered_hypotheses": statement["registered_hypotheses"]}
-                                        if version in ("v4.18", "v4.19", "v4.20", "v4.21", "v4.22", "v4.23", "v4.24", "v4.25", "v4.26", "v4.27", "v4.28", "v4.29", "v4.30") else {}),
+                                        if version in ("v4.18", "v4.19", "v4.20", "v4.21", "v4.22", "v4.23", "v4.24", "v4.25", "v4.26", "v4.27", "v4.28", "v4.29", "v4.30", "v4.31", "v4.32", "v4.33") else {}),
                                      **({"primary_latent_objective_weights": primary_latent_weights}
                                         if primary_latent_weights is not None else {}),
                                      **({"latent_objective_multiplier_scope": [
@@ -464,7 +499,7 @@ def freeze_pilot(directory, *, epochs=40, seeds=(17, 23, 41), model_width=32,
                                      "model": {"width": model_width, "heads": model_heads, "layers": model_layers,
                                                "max_length": max_length, "batch_size": batch_size,
                                                "learning_rate": learning_rate},
-                                     "primary_source_pointer_decoder_modes": list(pointer_decoder_modes),
+                                     "primary_source_pointer_decoder_modes": list(primary_pointer_decoder_modes),
                                      "generation_max_new_tokens": generation_budget, "human_validated": False,
                                      "decoder_policy": "greedy byte-level UTF-8 constrained decoding; EOS only at complete codepoint boundaries",
                                      "quality_thresholds": {"valid_unicode_rate": 1.0,
@@ -532,7 +567,8 @@ def _semantic_frame_flags(text, language, frame):
                              FAMILIES_V417, FAMILIES_V418, FAMILIES_V419, FAMILIES_V420,
                              FAMILIES_V421, FAMILIES_V422, FAMILIES_V423, FAMILIES_V424,
                              FAMILIES_V425, FAMILIES_V426, FAMILIES_V427, FAMILIES_V428,
-                             FAMILIES_V429, FAMILIES_V430)
+                             FAMILIES_V429, FAMILIES_V430, FAMILIES_V431, FAMILIES_V432,
+                             FAMILIES_V433)
     event = frame.get("event")
     definition = next((item for family_set in (FAMILIES_V4, FAMILIES_V42, FAMILIES_V43,
                                                FAMILIES_V44, FAMILIES_V45, FAMILIES_V46,
@@ -543,7 +579,7 @@ def _semantic_frame_flags(text, language, frame):
                                                FAMILIES_V420, FAMILIES_V421, FAMILIES_V422,
                                                FAMILIES_V423, FAMILIES_V424, FAMILIES_V425,
                                                FAMILIES_V426, FAMILIES_V427, FAMILIES_V428, FAMILIES_V429,
-                                               FAMILIES_V430)
+                                               FAMILIES_V430, FAMILIES_V431, FAMILIES_V432, FAMILIES_V433)
                        for group in family_set.values() for item in group if item[0] == event), None)
     if definition is None:
         return None
@@ -580,10 +616,10 @@ def _semantic_frame_flags(text, language, frame):
         agent, patient = agent_vi, patient_vi
         place = frame.get("place_vi")
         required_markers.append("hôm qua" if frame["time"] == "past" else "bây giờ")
-        progressive_now = (event.startswith(("compose423_", "compose424_", "compose425_", "compose426_", "compose427_", "compose428_", "compose429_", "compose430_"))
+        progressive_now = (event.startswith(("compose423_", "compose424_", "compose425_", "compose426_", "compose427_", "compose428_", "compose429_", "compose430_", "compose431_", "compose432_", "compose433_"))
                            and frame["time"] != "past"
                            and (frame["polarity"] == "positive"
-                                or event.startswith(("compose424_", "compose425_", "compose426_", "compose427_", "compose428_", "compose429_", "compose430_"))))
+                                or event.startswith(("compose424_", "compose425_", "compose426_", "compose427_", "compose428_", "compose429_", "compose430_", "compose431_", "compose432_", "compose433_"))))
         # New drafts declare the Vietnamese present form explicitly. Keep the
         # legacy fallback for previously frozen annotations, including v4.30.
         declared_present = frame.get("predicate_vi_present")
@@ -672,6 +708,7 @@ def _require_release_test_gate(base, protocol, manifest, rows):
     if not expected_buckets:
         raise ValueError("release holdout remains sealed: frozen validation buckets are empty")
 
+    reassessment = _load_v433_checker_reassessment(base, protocol)
     expected_evaluator = {key: value for key, value in _implementation_identity().items()
                           if key in {"pilot.py", "infer.py", "data.py"}}
     protocol_sha = _hash_file(base / "protocol.json")
@@ -692,6 +729,47 @@ def _require_release_test_gate(base, protocol, manifest, rows):
             "decoder_policy": {"max_new_tokens": protocol.get("generation_max_new_tokens", 160),
                                "source_language_equals_target": True},
         })
+        if reassessment is not None:
+            entry = reassessment["entries"].get(name)
+            if entry is None or entry.get("gate") != "pass":
+                raise ValueError("release holdout remains sealed: amended checker evidence does not pass")
+            evidence = entry.get("evidence_identity", {})
+            actual = {
+                "protocol_sha256": protocol_sha,
+                "config_sha256": _hash_file(base / name),
+                "checkpoint_sha256": _hash_file(output / "best.pt"),
+                "resolved_run_sha256": _hash_file(output / "resolved_run.json"),
+                "original_metrics_sha256": _hash_file(metrics_path),
+                "private_validation_generation_sha256": _hash_file(private_path),
+            }
+            if any(evidence.get(key) != value for key, value in actual.items()):
+                raise ValueError("release holdout remains sealed: amended validation evidence identity changed")
+            required_groups = {
+                f"{language}/{task}" for language in ("en", "vi")
+                for task in ("single", "held_out_path")
+            }
+            summary = entry.get("bucket_summary", {})
+            thresholds = protocol.get("quality_thresholds", {})
+            if set(summary) != required_groups:
+                raise ValueError("release holdout remains sealed: amended validation buckets are incomplete")
+            for group, result in summary.items():
+                task = group.split("/", 1)[1]
+                prefix = "single_action" if task == "single" else "held_out_path"
+                minima = result.get("minima", {})
+                required_rates = (
+                    (minima.get("valid_unicode_rate"), thresholds.get("valid_unicode_rate", 1.0)),
+                    (minima.get("checker_coverage_rate"), thresholds.get("semantic_checker_coverage_rate", 1.0)),
+                    (minima.get("action_fidelity_rate"), thresholds.get(f"{prefix}_action_fidelity_rate", 1.0)),
+                    (minima.get("preservation_rate"), thresholds.get(f"{prefix}_preservation_rate", 1.0)),
+                )
+                expected_count = sum(bucket.startswith(group + "/") for bucket in expected_buckets)
+                if (result.get("buckets") != expected_count or result.get("failed_buckets") != 0
+                        or any(type(rate) not in {int, float} or not math.isfinite(rate)
+                               or not 0 <= rate <= 1 or rate < threshold
+                               for rate, threshold in required_rates)):
+                    raise ValueError("release holdout remains sealed: amended validation scores miss frozen thresholds")
+            continue
+
         checks = report.get("quality_gate", {}).get("bucket_checks", {})
         if (report.get("evaluation_split") != "validation"
                 or report.get("primary_for_quality_gate") is not True
@@ -720,6 +798,51 @@ def _require_release_test_gate(base, protocol, manifest, rows):
                 raise ValueError("release holdout remains sealed: recorded validation scores miss frozen thresholds")
 
 
+def _load_v433_checker_reassessment(base, protocol):
+    """Load a separately frozen v4.33 checker amendment, if present and valid."""
+    from .experiment import _implementation_identity
+
+    base = Path(base)
+    amendment_v2_path = base / "release_test_amendment.v2.json"
+    amendment_path = (amendment_v2_path if amendment_v2_path.is_file()
+                      else base / "release_test_amendment.json")
+    if not amendment_path.is_file():
+        return None
+    statement = _read(base / "data_statement.json")
+    if statement.get("version") != "vi-en-ai-v4.33":
+        raise ValueError("release holdout remains sealed: checker amendment is only valid for v4.33")
+    amendment = _read(amendment_path)
+    from .experiment import _canonical_hash
+    expected_identity = {key: value for key, value in _implementation_identity().items()
+                         if key in {"pilot.py", "infer.py", "data.py"}}
+    report_path = base / amendment.get("validation_reassessment", "")
+    if (amendment.get("schema_version") not in {
+                "v433-release-test-amendment-v1", "v433-release-test-amendment-v2"}
+            or amendment.get("protocol_sha256") != _hash_file(base / "protocol.json")
+            or amendment.get("frozen_implementation_sha256") != protocol.get("implementation_sha256")
+            or amendment.get("runtime") != protocol.get("runtime")
+            or amendment.get("amended_evaluator_sha256") != expected_identity
+            or amendment.get("quality_thresholds") != protocol.get("quality_thresholds")
+            or not report_path.is_file()
+            or amendment.get("validation_reassessment_sha256") != _hash_file(report_path)):
+        raise ValueError("release holdout remains sealed: checker amendment identity is invalid")
+    report = _read(report_path)
+    if (report.get("schema_version") != "v433-semantic-checker-reassessment-v1"
+            or report.get("pilot_version") != "vi-en-ai-v4.33"
+            or report.get("release_holdout_opened") is not False
+            or report.get("human_validated") is not False
+            or report.get("phomt_used") is not False
+            or report.get("corrected_checker_sha256") != _hash_file(Path(__file__).resolve())):
+        raise ValueError("release holdout remains sealed: checker reassessment provenance is invalid")
+    entries = {entry.get("run"): entry for entry in report.get("runs", [])}
+    if len(entries) != len(report.get("runs", [])):
+        raise ValueError("release holdout remains sealed: checker reassessment has duplicate runs")
+    if amendment.get("primary_configs") != sorted(
+            name for name, entry in entries.items() if entry.get("primary")):
+        raise ValueError("release holdout remains sealed: amended primary run registration changed")
+    return {"entries": entries, "sha256": _canonical_hash(report)}
+
+
 def evaluate_generation(config_path, *, max_new_tokens=160, split="test"):
     """Aggregate automated held-out scores; save generated text only privately."""
     from .experiment import (_canonical_hash, _implementation_identity, _parse_inventory,
@@ -740,8 +863,11 @@ def evaluate_generation(config_path, *, max_new_tokens=160, split="test"):
     alignment_hash = _canonical_hash(_read(align_path)) if align_path else None
     validate_review_gate(base, config, manifest, _canonical_hash(inventory_value), alignment_hash)
     protocol = _read(base / "protocol.json")
-    if (protocol.get("implementation_sha256") != _implementation_identity()
-            or protocol.get("runtime") != _runtime_identity()):
+    code_matches = protocol.get("implementation_sha256") == _implementation_identity()
+    runtime_matches = protocol.get("runtime") == _runtime_identity()
+    amended_release = (split == "test" and runtime_matches
+                      and _load_v433_checker_reassessment(base, protocol) is not None)
+    if not runtime_matches or (not code_matches and not amended_release):
         raise ValueError("current code/runtime differs from the frozen pilot protocol")
     if max_new_tokens != protocol.get("generation_max_new_tokens"):
         raise ValueError("generation budget differs from the frozen pilot protocol")
@@ -770,7 +896,10 @@ def evaluate_generation(config_path, *, max_new_tokens=160, split="test"):
         return {k: v for k, v in cached.items() if not k.startswith("_")}
     if private_path.exists():
         raise FileExistsError("partial private generation evidence exists; preserve it and create a new run")
-    generator = OfflineGenerator(path, checkpoint_path, device="cpu")
+    generator = OfflineGenerator(
+        path, checkpoint_path, device="cpu",
+        allowed_implementation_identity=(protocol["implementation_sha256"]
+                                         if amended_release else None))
     held_out = [r for r in rows if manifest.groups[r.split_group_id] == split]
     frames = _read(base / "semantic_frames.json")
     accepted_by_frame = {}
@@ -955,6 +1084,8 @@ def main():
                         choices=("row_uniform", "unique_transition"))
     parser.add_argument("--condition-source-pointer-decoder-modes", nargs="+",
                         choices=("vocabulary", "source_pointer"))
+    parser.add_argument("--primary-source-pointer-decoder-modes", nargs="+",
+                        choices=("vocabulary", "source_pointer"))
     parser.add_argument("--condition-scheduled-sampling-rates", nargs="+", type=float)
     parser.add_argument("--condition-language-balance-weights", nargs="+", type=float)
     parser.add_argument("--checkpoint-selection-policy", choices=("validation_loss", "fixed_final_epoch"),
@@ -974,6 +1105,7 @@ def main():
                               condition_latent_objective_weights=args.condition_latent_objective_weights,
                               condition_transition_balances=args.condition_transition_balances,
                               condition_source_pointer_decoder_modes=args.condition_source_pointer_decoder_modes,
+                              primary_source_pointer_decoder_modes=args.primary_source_pointer_decoder_modes,
                               condition_scheduled_sampling_rates=args.condition_scheduled_sampling_rates,
                               condition_language_balance_weights=args.condition_language_balance_weights,
                               checkpoint_selection_policy=args.checkpoint_selection_policy,

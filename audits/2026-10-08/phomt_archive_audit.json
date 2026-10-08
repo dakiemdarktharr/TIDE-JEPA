@@ -1,0 +1,174 @@
+{
+  "archive_name": "PhoMT.zip",
+  "archive_sha256": "fd58972b5058b17d0823b78e6ce7dbb775243e156efa2ca222079dbdd76e6a2e",
+  "archive_size_bytes": 355890192,
+  "crc_checked": true,
+  "dataset": "vinai/PhoMT",
+  "file_count": 13,
+  "file_revision": "aee99d07f0f5e6faf64b64f52adf314563350ce5",
+  "file_suffix_counts": {
+    ".en": 6,
+    ".md": 1,
+    ".vi": 6
+  },
+  "member_count": 22,
+  "members": [
+    {
+      "compressed_bytes": 0,
+      "compression_method": 0,
+      "is_directory": true,
+      "path": "PhoMT",
+      "uncompressed_bytes": 0
+    },
+    {
+      "compressed_bytes": 0,
+      "compression_method": 0,
+      "is_directory": true,
+      "path": "PhoMT/tokenization",
+      "uncompressed_bytes": 0
+    },
+    {
+      "compressed_bytes": 0,
+      "compression_method": 0,
+      "is_directory": true,
+      "path": "PhoMT/tokenization/test",
+      "uncompressed_bytes": 0
+    },
+    {
+      "compressed_bytes": 645393,
+      "compression_method": 8,
+      "is_directory": false,
+      "path": "PhoMT/tokenization/test/test.vi",
+      "uncompressed_bytes": 2056622
+    },
+    {
+      "compressed_bytes": 582003,
+      "compression_method": 8,
+      "is_directory": false,
+      "path": "PhoMT/tokenization/test/test.en",
+      "uncompressed_bytes": 1545600
+    },
+    {
+      "compressed_bytes": 0,
+      "compression_method": 0,
+      "is_directory": true,
+      "path": "PhoMT/tokenization/train",
+      "uncompressed_bytes": 0
+    },
+    {
+      "compressed_bytes": 83901516,
+      "compression_method": 8,
+      "is_directory": false,
+      "path": "PhoMT/tokenization/train/train.en",
+      "uncompressed_bytes": 229677634
+    },
+    {
+      "compressed_bytes": 92167096,
+      "compression_method": 8,
+      "is_directory": false,
+      "path": "PhoMT/tokenization/train/train.vi",
+      "uncompressed_bytes": 302376913
+    },
+    {
+      "compressed_bytes": 0,
+      "compression_method": 0,
+      "is_directory": true,
+      "path": "PhoMT/tokenization/dev",
+      "uncompressed_bytes": 0
+    },
+    {
+      "compressed_bytes": 535310,
+      "compression_method": 8,
+      "is_directory": false,
+      "path": "PhoMT/tokenization/dev/dev.en",
+      "uncompressed_bytes": 1422201
+    },
+    {
+      "compressed_bytes": 592329,
+      "compression_method": 8,
+      "is_directory": false,
+      "path": "PhoMT/tokenization/dev/dev.vi",
+      "uncompressed_bytes": 1885286
+    },
+    {
+      "compressed_bytes": 834,
+      "compression_method": 8,
+      "is_directory": false,
+      "path": "PhoMT/README.md",
+      "uncompressed_bytes": 1577
+    },
+    {
+      "compressed_bytes": 0,
+      "compression_method": 0,
+      "is_directory": true,
+      "path": "PhoMT/detokenization",
+      "uncompressed_bytes": 0
+    },
+    {
+      "compressed_bytes": 0,
+      "compression_method": 0,
+      "is_directory": true,
+      "path": "PhoMT/detokenization/test",
+      "uncompressed_bytes": 0
+    },
+    {
+      "compressed_bytes": 643137,
+      "compression_method": 8,
+      "is_directory": false,
+      "path": "PhoMT/detokenization/test/test.vi",
+      "uncompressed_bytes": 2018646
+    },
+    {
+      "compressed_bytes": 578023,
+      "compression_method": 8,
+      "is_directory": false,
+      "path": "PhoMT/detokenization/test/test.en",
+      "uncompressed_bytes": 1500094
+    },
+    {
+      "compressed_bytes": 0,
+      "compression_method": 0,
+      "is_directory": true,
+      "path": "PhoMT/detokenization/train",
+      "uncompressed_bytes": 0
+    },
+    {
+      "compressed_bytes": 83276106,
+      "compression_method": 8,
+      "is_directory": false,
+      "path": "PhoMT/detokenization/train/train.en",
+      "uncompressed_bytes": 222361400
+    },
+    {
+      "compressed_bytes": 91842096,
+      "compression_method": 8,
+      "is_directory": false,
+      "path": "PhoMT/detokenization/train/train.vi",
+      "uncompressed_bytes": 296662291
+    },
+    {
+      "compressed_bytes": 0,
+      "compression_method": 0,
+      "is_directory": true,
+      "path": "PhoMT/detokenization/dev",
+      "uncompressed_bytes": 0
+    },
+    {
+      "compressed_bytes": 531877,
+      "compression_method": 8,
+      "is_directory": false,
+      "path": "PhoMT/detokenization/dev/dev.en",
+      "uncompressed_bytes": 1380023
+    },
+    {
+      "compressed_bytes": 590444,
+      "compression_method": 8,
+      "is_directory": false,
+      "path": "PhoMT/detokenization/dev/dev.vi",
+      "uncompressed_bytes": 1849605
+    }
+  ],
+  "pickle_members_not_deserialized": [],
+  "requires_pickle_conversion_review": false,
+  "uncompressed_size_bytes": 1064737892
+}

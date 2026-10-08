@@ -15,7 +15,8 @@ from tide_jepa.model import TIDEJEPA
 class OfflineGenerator:
     """Load one trained checkpoint and serve single-request generation offline."""
 
-    def __init__(self, run_config: str | Path, checkpoint: str | Path, *, device: str = "auto"):
+    def __init__(self, run_config: str | Path, checkpoint: str | Path, *, device: str = "auto",
+                 allowed_implementation_identity: dict | None = None):
         config_path = Path(run_config).resolve()
         with config_path.open("r", encoding="utf-8") as stream:
             config = json.load(stream)
@@ -53,9 +54,12 @@ class OfflineGenerator:
         identity = {key: resolved[key] for key in identity_keys}
         if "review_approval_sha256" in resolved:
             identity["review_approval_sha256"] = resolved["review_approval_sha256"]
+        expected_implementation = (allowed_implementation_identity
+                                   if allowed_implementation_identity is not None
+                                   else _implementation_identity())
         if (resolved.get("config") != config
                 or resolved.get("inventory_sha256") != _canonical_hash(inventory_value)
-                or resolved.get("implementation_sha256") != _implementation_identity()
+                or resolved.get("implementation_sha256") != expected_implementation
                 or resolved.get("runtime") != _runtime_identity()
                 or resolved.get("run_sha256") != state.get("run_sha256")
                 or resolved.get("run_sha256") != _canonical_hash(identity)):

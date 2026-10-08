@@ -1,0 +1,43 @@
+{
+  "all_requests_passed": false,
+  "batch_elapsed_seconds": 0.138,
+  "bounded_concurrency_behavior": true,
+  "concurrent_clients": 4,
+  "date": "2026-10-09",
+  "diagnostic_only_responses": 1,
+  "expected_overload_refusals": 79,
+  "http_status_counts": {
+    "200": 1,
+    "503": 79
+  },
+  "human_validated": false,
+  "latency_ms": {
+    "max": 136.107,
+    "mean": 3.244,
+    "p50": 1.404,
+    "p95": 2.84,
+    "p99": 136.107
+  },
+  "listener_identity_verified": true,
+  "nonempty_outputs": 1,
+  "overload_refusal_schema_valid": 79,
+  "phomt_used": false,
+  "request_count": 80,
+  "request_source": "page-default; text omitted from report",
+  "schema_version": "v433-demo-runtime-benchmark-v1",
+  "server_pid_found": true,
+  "server_rss_first_kib": 85724,
+  "server_rss_kib_samples": [
+    85724,
+    87380,
+    87380,
+    87380,
+    87380,
+    87380
+  ],
+  "server_rss_last_kib": 87380,
+  "service": "loopback v4.33 diagnostic demo",
+  "source_or_generated_text_recorded": false,
+  "throughput_requests_per_second": 579.185,
+  "valid_utf8_responses": 80
+}

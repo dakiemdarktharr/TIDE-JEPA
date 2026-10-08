@@ -1,0 +1,19 @@
+{
+  "schema_version": "v433-current-loopback-smoke-v2",
+  "timestamp_utc": "2026-10-08T15:56:19Z",
+  "health_http_status": 200,
+  "health_pilot_version": "vi-en-ai-v4.33",
+  "health_quality_status": "diagnostic_only",
+  "health_human_validated": false,
+  "health_phomt_trained": false,
+  "page_http_status": 200,
+  "approved_train_request_http_status": 200,
+  "approved_response_valid_json": true,
+  "generated_text_field_present": true,
+  "approved_response_valid_utf8": true,
+  "unknown_source_http_status": 400,
+  "cross_language_http_status": 400,
+  "elapsed_seconds": 0.115,
+  "source_or_generated_text_recorded": false,
+  "quality_status": "diagnostic_only"
+}

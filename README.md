@@ -1,6 +1,6 @@
 # TIDE-JEPA
 
-Status snapshot, **2026-10-08**: v4.29 completed six fixed-final TIDE runs and validation-only generation but failed its frozen quality gate (1/6 configurations; 37/60 seed-by-bucket checks). v4.30 also completed six runs and validation; its frozen report recorded 1/6 configurations and 29/60 buckets passing, but a subsequent negative-control audit found its checker misses Vietnamese progressive-marker deletions. Treat v4.30 scores as limited historical evidence, not confirmatory quality evidence. Both release holdouts remain sealed; no checkpoint is approved for usable language output. See [v4.29 status](VI_EN_RESULTS_V4.29_STATUS.md), [v4.30 status](VI_EN_RESULTS_V4.30_STATUS.md), [checker audit and next research steps](RESEARCH_ACCELERATION.md), and [current results](VI_EN_RESULTS.md).
+Status snapshot, **2026-10-09**: v4.33 completed six frozen 58-epoch runs and passed corrected validation; after a hash-bound evaluator amendment, all three TIDE seeds passed the registered release-test buckets. The checker initially omitted the new event family; original metrics remain preserved and the unchanged generations were rescored. Token-only controls were similar and do not show a consistent TIDE advantage. The stock UI default was out of corpus and produced a corrupted output; the v4.33 runner now preloads a train-only example that passes the narrow checker. A two-reviewer Luna spot check of 48 stratified validation outputs found 47/48 acceptable for naturalness and 48/48 for meaning/action fidelity, with one spelling issue; it remains preliminary AI evidence, not human validation. Semantic OOD remains untested, so the checkpoint stays diagnostic-only. A fresh pinned-lock Linux snapshot passed 154 tests with zero skips; two varied train-only benchmark passes returned 40/40 HTTP 200 across both languages and single-action/two-action inputs, with unchanged RSS on the repeat. Overlapping clients receive schema-valid HTTP 503 under the one-inference limit. Evidence: [v4.33 status](VI_EN_RESULTS_V4.33_STATUS.md), [validation reassessment](audits/2026-10-08/v433_validation_checker_reassessment.json), [release holdout aggregates](audits/2026-10-08/v433_release_holdout_aggregate.json), [demo smoke](audits/2026-10-08/v433_demo_smoke.json), [AI review](audits/2026-10-08/v433_validation_ai_linguistic_review.json), plus [v4.32 failure history](VI_EN_RESULTS_V4.32_STATUS.md).
 
 From-scratch research prototype for action-conditioned latent transitions and controlled generation. The current preliminary pilot covers **Vietnamese and English**; **Phan Rang Cham** is a planned language whose training/evaluation remains deferred pending permission and language review.
 
@@ -8,7 +8,7 @@ Read [the current specification](tide_jepa_spec.md) first. The [project decision
 
 Current data-source findings and the PhoMT permission record are in [Dataset Research — 2026-09-30](Obsidian/RMIT%20Hackathon/wiki/Dataset%20Research%20%E2%80%94%202026-09-30.md). PhoMT is conditionally approved for the requested research/education scope; its local archive now passes the supplied SHA-256 and metadata audit. It has not been used for model training.
 
-The user-authorized **preliminary AI-reviewed English–Vietnamese synthetic pilot** has a reproducible training/evaluation workflow and an offline diagnostic demo. v4.29 failed its frozen gate (1/6 configurations and 37/60 seed-by-bucket checks). v4.30's six runs and validation are complete, but the frozen checker missed progressive-marker deletions; its result is limited historical evidence. Neither checkpoint is admitted as usable output, and both release holdouts remain sealed. v4.27 and v4.28 were retired after review exposed holdout content/annotations. Earlier results and incidents are documented in [current results](VI_EN_RESULTS.md), [history](VI_EN_RESULTS_HISTORY.md), [the pilot workflow](VI_EN_PILOT.md), and [research acceleration](RESEARCH_ACCELERATION.md). The pilot is AI-authored synthetic text, not PhoMT and not human-validated. Phan Rang Cham is deferred pending data-use permission and language/community review. Agent creation follows [the user's Luna-only requirement](AGENTS.md).
+The user-authorized **preliminary AI-reviewed English–Vietnamese synthetic pilot** now passes its narrow synthetic gate in v4.33, but this is not human validation or research-efficacy evidence; the new small AI review found one spelling issue and does not establish natural-corpus naturalness. The offline demo is explicitly diagnostic-only and does not classify semantic OOD inputs. PhoMT was not used. Phan Rang Cham remains deferred pending data-use permission and language/community review. Earlier results and the v4.27/v4.28 review incidents remain in [results](VI_EN_RESULTS.md), [history](VI_EN_RESULTS_HISTORY.md), [pilot workflow](VI_EN_PILOT.md), and [research acceleration](RESEARCH_ACCELERATION.md). Agent creation follows the Luna-only requirement in [AGENTS.md](AGENTS.md).
 
 ## How the model works
 
@@ -105,7 +105,7 @@ The checkpoint rule is frozen before training; v4.21 used the final epoch rather
 
 ### What the evidence currently supports
 
-The software supports reproducible experiments and diagnostic inference. It has not demonstrated a usable linguistic model or a TIDE advantage: v4.20 passed **0/60** frozen validation bucket gates, with preservation below 1% for both decoders, despite 100% Unicode validity and EOS termination. v4.21 has an invalid evaluator-coverage report; v4.22 is held before freeze; v4.23–v4.25 had full checker coverage but failed their frozen quality gates. v4.25 passed 44/60 seed-by-bucket checks but only 3/6 full-config gates. Its corpus and reviews are AI-authored/AI-reviewed, preliminary, and `human_validated=false`. PhoMT training has not occurred, and Cham training/evaluation remains deferred. The current Linux CPU test, compile, dependency, and probe evidence is recorded in the [audit closure](audits/2026-10-02/REPAIR_CLOSURE.md). Those checks verify software behavior, not linguistic quality.
+The software supports reproducible experiments and diagnostic inference. v4.33 passed its narrow corrected synthetic gate, but the stock UI default was out of corpus and corrupted; the amended runner uses a train-only example. Token-only is similar and no natural-language model or TIDE advantage is established. v4.20–v4.32 failures remain in the historical reports. Linux CPU test, compile, dependency, and probe evidence is recorded in the [audit closure](audits/2026-10-02/REPAIR_CLOSURE.md). Those checks verify software behavior, not linguistic quality.
 
 ## Current implementation: action-path composition
 
@@ -144,7 +144,7 @@ py -3.11 -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r requirements-test-cpu.txt
 ```
 
-The `.venv` directory is ignored by Git. If it already contains this runtime, use it directly; activation is unnecessary. The requirements file pins PyTorch and its CPU channel; pip resolves transitive dependencies, so this is not a complete dependency lock.
+The `.venv` directory is ignored by Git. If it already contains this runtime, use it directly; activation is unnecessary. `requirements-test-cpu.txt` pins PyTorch and its CPU channel; use `requirements-lock-linux-py311-cpu.txt` when exact transitive versions are required.
 
 Run the checks with that environment:
 
@@ -173,7 +173,17 @@ PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -B -m unittest discover -s tests -v
 .venv/bin/python -m pip check
 ```
 
-Verified on 2026-10-06 from a clean tracked-source archive of commit `925acb1` with a newly created virtualenv and `torch==2.14.0+cpu`: **96 tests passed, 0 skipped**, `compileall` passed, and `pip check` found no broken requirements. The source archive contained no ignored `data/` or `runs/` artifacts. The full suite includes loopback HTTP tests and therefore needs local loopback binding. This verifies the commands on the current Linux host; transitive package versions are resolver-selected, so `requirements-test-cpu.txt` is still not a complete dependency lock. CUDA, clean OS-image provisioning, and GPU behavior are unverified.
+For a pinned Linux CPU test environment, use the resolved lock instead of resolver-selected transitive packages:
+
+```sh
+python3.11 -m venv .venv
+.venv/bin/python -m pip install -r requirements-lock-linux-py311-cpu.txt
+PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -B -m unittest discover -s tests -v
+.venv/bin/python -B -m compileall -q tide_jepa tests audits/2026-10-02/root_probes.py
+.venv/bin/python -m pip check
+```
+
+Verified on 2026-10-06 from a clean tracked-source archive of commit `925acb1` with a newly created virtualenv and `torch==2.14.0+cpu`: **96 tests passed, 0 skipped**, `compileall` passed, and `pip check` found no broken requirements. The source archive contained no ignored `data/` or `runs/` artifacts. The full suite includes loopback HTTP tests and therefore needs local loopback binding. On 2026-10-08 the current lattice checkout passed **150 tests, 0 skipped**, plus `compileall`, `pip check`, the synthetic root probe after run-manifest writer correction, and `git diff --check`. Four review-summarizer regression tests were added later; the refreshed **219-source-file** snapshot passed the complete **154-test** suite with zero skips, `compileall`, and `pip check` in a newly created virtualenv installed from the pinned lock. See the [2026-10-09 final source-only reproduction report](audits/2026-10-09/linux-source-only-final-reproduction.json), [audit closure](audits/2026-10-02/REPAIR_CLOSURE.md), and [original lock-bootstrap evidence](audits/2026-10-08/linux-lock-bootstrap.json). The refreshed snapshot came from the current uncommitted working tree and excludes `.git`, `.venv`, `data/`, and `runs/`; this is not a clean commit or OS image. CUDA remains unverified.
 
 ## Frozen diagnostic demo
 
@@ -183,13 +193,37 @@ Current troubleshooting evidence is in [the 2026-10-06 repair report](audits/202
 .venv/bin/python -B scripts/run_frozen.py data/pilot/vi-en-ai-v4.20 demo data/pilot/vi-en-ai-v4.20/tide-aux-0p0-decoder-source_pointer-copy-0p0-seed-17.json runs/vi-en-ai-v4.20/tide-aux-0p0-decoder-source_pointer-copy-0p0-seed-17/best.pt --port 8765
 ```
 
-Open `http://127.0.0.1:8765` for a diagnostic demo. The launcher verifies every source hash and the Python/PyTorch runtime before loading the snapshot. Its output remains preliminary and the v4.20 quality gate remains failed. In PowerShell, pass explicit `-Config` and `-Checkpoint` paths to `scripts/run_vi_en_demo.ps1`; it uses the same frozen launcher when a protocol is present.
+For v4.33, launch the [amendment-aware diagnostic demo](scripts/run_v433_demo.py); it verifies the corrected validation evidence and frozen checkpoint identity, binds loopback only, allows only exact approved train source/action combinations, and reports `diagnostic_only`. The old stock-page example was out of corpus and produced semantic corruption; the current train-only example passes the narrow checker. Two five-minute sequential soaks (3,132 and 3,219 requests), burst/incomplete-body handling, delayed stale-response browser checks, and two bounded 240-request latency/RSS runs passed. The two sequential benchmark runs returned 240/240 successful requests and sampled 85,520 KiB RSS. A separate 4-client/80-request test ran twice: the one-inference limit served one request and returned schema-valid HTTP 503 for the 79 overlapping requests each time; RSS increased 112 KiB in the repeat after an initial 1.6 MiB warm-up. See [concurrency run 1](audits/2026-10-09/v433_demo_concurrent_bound.json) and [run 2](audits/2026-10-09/v433_demo_concurrent_bound_repeat.json). A separate sequential varied-input test used 40 requests per pass from 64 exact approved train candidates (both languages, single actions and two-action paths); both passes returned 40/40 HTTP 200 and passed the narrow checker in all four language/task cells (10/10 each); RSS was unchanged on the first pass and increased 4 KiB in the repeat. See [varied run 1](audits/2026-10-09/v433_demo_varied_quality_benchmark_1.json) and [run 2](audits/2026-10-09/v433_demo_varied_quality_benchmark_2.json). This is synthetic train-only evidence; natural-corpus performance and production capacity remain unverified. Broad semantic OOD and naturalness also remain unverified, so do not use this checkpoint for translation or natural-language production. Reproduce the bounded benchmark (the output path must be new) with:
+
+```sh
+.venv/bin/python -B scripts/benchmark_v433_demo_runtime.py --port 8765 --requests 240 --output /tmp/v433-demo-runtime-recheck.json
+```
+
+To reproduce the bounded overload check, use the approved page-default request only. The port must belong to the v4.33 runner, and the report path must be new:
+
+```sh
+.venv/bin/python -B scripts/benchmark_v433_demo_runtime.py --port 8765 --requests 80 --workers 4 --output /tmp/v433-demo-concurrent-recheck.json
+```
+
+To exercise varied approved train inputs without recording their text, use the explicit v4.33 config and `--vary-approved`:
+
+```sh
+.venv/bin/python -B scripts/benchmark_v433_demo_runtime.py --port 8765 --requests 40 --workers 1 --vary-approved --output /tmp/v433-demo-varied-train-recheck.json
+```
+
+Recheck the exact allowlist and HTTP boundaries; the aggregate-only report covers 19 expected accepted/refused request classes, not a semantic OOD classifier:
+
+```sh
+.venv/bin/python -B scripts/smoke_v433_demo_boundaries.py --port 8765 --output /tmp/v433-demo-boundary-recheck.json
+```
+
+In PowerShell, pass explicit `-Config` and `-Checkpoint` paths to `scripts/run_vi_en_demo.ps1`; that older launcher uses the frozen snapshot path.
 
 The Python test suite requires loopback access for its HTTP tests. Run the isolated UI behavior checks separately with `node tests/demo_ui.test.js` when Node.js is available; Node.js is a development check, not a model runtime dependency.
 
 ## Layout
 
-For current research bottlenecks, the v4.30 checker repair, fast train-only checkpoint probes, and the shorter experiment workflow, see [Research acceleration](RESEARCH_ACCELERATION.md). The parallel trainer checks the exact frozen checker on train-reference negative controls before launching scoped review-bundle matrices. The historical v4.30 checker fails that preflight; its completed runs retain their original identities and its release holdout remains sealed.
+For current research bottlenecks, v4.33 corrected validation/release results, and the next evidence gates, see [Research acceleration](RESEARCH_ACCELERATION.md). The parallel trainer checks the exact frozen checker on train-reference negative controls before launching scoped review-bundle matrices. The historical v4.30 checker fails that preflight; its completed runs retain their original identities and its release holdout remains sealed.
 
 - `tide_jepa/config.py`: language registry and model sizes.
 - `tide_jepa/data.py`: versioned corpus rows, UTF-8 byte tokenizer, approval gate, grouped splits, and fingerprints.
@@ -239,4 +273,4 @@ Use `"alignments": "alignments.json"` to enable separately reviewed pairs. Its `
 
 For offline inference with a trained checkpoint, run `python -m tide_jepa.infer run.json runs/tide-seed-1/best.pt`. Send one JSON request per line on stdin, for example `{"request_id":"demo-1","source":"Lan mua một quyển sách.","source_language":"vi","target_language":"vi","actions":[{"kind":"TIME","value":"PAST"},{"kind":"POLARITY","value":"NEGATIVE"}],"max_new_tokens":96}`. Responses are JSONL and include generated text, token IDs, and a UTF-8 validity flag. The adapter checks the language's approved action inventory and supports single actions or ordered action paths. Its responses are diagnostic preliminary outputs; they do not establish linguistic correctness or human validation.
 
-This runner makes training executable, not scientifically validated. v4.29 failed validation at 1/6 full-config gates and 37/60 seed-by-bucket checks. v4.30 completed, but its checker accepted Vietnamese progressive deletions; its frozen metrics are limited historical evidence and do not establish a valid quality gate. Both release holdouts remain sealed. v4.27 was retired after test-split exposure during review, and v4.28 after holdout annotations were accessed; both remain incident evidence. See [v4.29 status](VI_EN_RESULTS_V4.29_STATUS.md), [v4.30 status](VI_EN_RESULTS_V4.30_STATUS.md), [checker audit and next steps](RESEARCH_ACCELERATION.md), [retired v4.27](VI_EN_RESULTS_V4.27_STATUS.md), [retired v4.28](VI_EN_RESULTS_V4.28_STATUS.md), and the [audit closure](audits/2026-10-02/REPAIR_CLOSURE.md). The v4.8 artifact hashes match the handoff status, but its Windows Python 3.11.9 runtime differs from lattice's Linux Python 3.11.17, so it was not resumed. None of these results provides natural-corpus or human linguistic evidence. PhoMT-derived action annotations and the human-validated benchmark remain unfinished.
+This runner makes training executable, not scientifically validated. v4.33 passes its narrow synthetic gate after a checker amendment, but the local demo remains diagnostic-only and no natural-language use is approved. v4.27 was retired after test-split exposure during review, and v4.28 after holdout annotations were accessed; both remain incident evidence. See [v4.33 status](VI_EN_RESULTS_V4.33_STATUS.md), [historical results](VI_EN_RESULTS_HISTORY.md), [research acceleration](RESEARCH_ACCELERATION.md), and the [audit closure](audits/2026-10-02/REPAIR_CLOSURE.md). The v4.8 artifact hashes match the handoff status, but its Windows runtime differed from lattice Linux, so it was not resumed. No natural-corpus or human linguistic evidence exists. PhoMT-derived action annotations and the human-validated benchmark remain unfinished.

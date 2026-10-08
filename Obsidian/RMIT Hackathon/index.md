@@ -8,7 +8,23 @@ This folder is an Obsidian-compatible, project-local knowledge vault. Open this 
 - [[wiki/RMIT Hackathon 2026]] — current official event-format facts, unresolved deliverables, and page inconsistencies.
 - [[wiki/Dataset Research — 2026-09-30]] — current corpus decision, PhoMT conditional permission, mandatory paper citation/release checklist, and intake status. The 2026-09-28 page is historical research context.
 - [[wiki/First Implementation Milestone]] — data-agnostic TIDE-JEPA prototype, independent review, and verification limits.
-- [[experiments/index]] — AI-reviewed synthetic Vi–En preliminary pilots; v4.29 failed its frozen gate, while v4.30's completed metrics are limited by a checker defect. Both release holdouts remain sealed; v4.27/v4.28 were retired after holdout exposure.
+- [[experiments/index]] — v4.33 passed corrected narrow synthetic gates; demo remains diagnostic-only after a bounded loopback/stale-response audit.
+- [v4.33 status](../../VI_EN_RESULTS_V4.33_STATUS.md) — validation and release-test gates pass; diagnostic-only demo boundary.
+- [v4.33 release aggregates](../../audits/2026-10-08/v433_release_holdout_aggregate.json) — aggregate-only metrics and evidence hashes.
+- [v4.33 preliminary AI linguistic review](../../audits/2026-10-08/v433_validation_ai_linguistic_review.json) — 48 validation outputs, aggregate-only; not human validation.
+- [v4.33 demo smoke](../../audits/2026-10-08/v433_demo_smoke.json) — local UI smoke; natural-language use remains unapproved.
+- [v4.33 boundary smoke](../../audits/2026-10-08/v433_demo_boundary_smoke.json) — 19 aggregate-only exact-allowlist and HTTP-boundary cases; not semantic OOD detection.
+- [v4.33 runtime/RSS benchmark 1](../../audits/2026-10-08/v433_demo_runtime_benchmark_3.json) — 240 repeated loopback requests; aggregate-only.
+- [v4.33 runtime/RSS benchmark 2](../../audits/2026-10-08/v433_demo_runtime_benchmark_4.json) — repeated measurement against the verified v4.33 runner.
+- [Linux lock bootstrap](../../audits/2026-10-08/linux-lock-bootstrap.json) — clean source-only snapshot and pinned CPU environment evidence.
+- [Linux final source-only reproduction](../../audits/2026-10-09/linux-source-only-final-reproduction.json) — refreshed 219-file snapshot, 154/154 tests, zero skips, compile and dependency checks.
+- [v4.33 concurrent overload check 1](../../audits/2026-10-09/v433_demo_concurrent_bound.json) — four clients; bounded one-inference policy; aggregate-only.
+- [v4.33 concurrent overload check 2](../../audits/2026-10-09/v433_demo_concurrent_bound_repeat.json) — repeated RSS sample after warm-up; aggregate-only.
+- [v4.33 varied train-only benchmark 1](../../audits/2026-10-09/v433_demo_varied_quality_benchmark_1.json) — 40/40 successful mixed-language/action requests; aggregate-only.
+- [v4.33 varied train-only benchmark 2](../../audits/2026-10-09/v433_demo_varied_quality_benchmark_2.json) — repeated memory sample after warm-up; aggregate-only.
+- [v4.32 status](../../VI_EN_RESULTS_V4.32_STATUS.md) — preserved validation failure history.
+- [v4.32 validation](../../audits/2026-10-08/VI_EN_V4.32_VALIDATION.md) — aggregate-only frozen validation results.
+- [v4.32 train-only overfit diagnostic](../../audits/2026-10-08/V432_TRAIN_GROUP_OVERFIT.md) — memorization sanity check; not generalization evidence.
 - [v4.29 status](../../VI_EN_RESULTS_V4.29_STATUS.md) — six runs and validation complete; 1/6 full-config gates and 37/60 seed-by-bucket checks passed; holdout sealed.
 - [v4.29 validation](../../VI_EN_RESULTS_V4.29_VALIDATION.md) — aggregate-only metrics, frozen thresholds, and per-seed diagnostics.
 - [v4.29 component diagnostic](../../VI_EN_RESULTS_V4.29_DIAGNOSTIC.md) — post-hoc role preservation by language and balance condition.
@@ -43,7 +59,7 @@ This folder is an Obsidian-compatible, project-local knowledge vault. Open this 
 - [v4.17 status](../../VI_EN_RESULTS_V4.17_STATUS.md) — 12 runs and validation complete; all 60 primary checks failed, holdout sealed. See [aggregate report](../../VI_EN_RESULTS_V4.17_VALIDATION.md).
 - [v4.15 status](../../VI_EN_RESULTS_V4.15_STATUS.md) — latest completed nine-run comparison; primary TIDE gate failed and holdout sealed.
 - [v4.14 status](../../VI_EN_RESULTS_V4.14_STATUS.md) — corrected 15,360-record context-diversity pilot; six runs and validation completed, frozen TIDE gate failed, holdout sealed.
-- [VI_EN_RESULTS.md](../../VI_EN_RESULTS.md) — current v4.29 validation failure; earlier aggregate evaluations preserved.
+- [VI_EN_RESULTS.md](../../VI_EN_RESULTS.md) — v4.33 corrected synthetic gates pass; demo remains diagnostic-only; earlier failures preserved.
 - [v4.10 status](../../VI_EN_RESULTS_V4.10_STATUS.md) — frozen private synthetic protocol with two independent Luna approvals; 12/12 training and validation complete, TIDE preservation gate failed and holdout remains sealed. See the [validation report](../../VI_EN_RESULTS_V4.10_VALIDATION.md). v4.9 was superseded before training.
 - v4.14 — six matched runs and validation-only evaluation complete; 4/30 primary seed-by-bucket checks passed, all four held-out paths; all 24 single-action checks failed. Token-only pooled preservation exceeded TIDE in all buckets. Holdout remains sealed. See [status](../../VI_EN_RESULTS_V4.14_STATUS.md) and the [aggregate report](../../VI_EN_RESULTS_V4.14_VALIDATION.md).
 - v4.13 — 12/12 dose-response runs and validation-only evaluation complete; only 10/60 seed-by-bucket checks passed, including one single-action bucket; 47/48 single-action buckets failed, and three path buckets failed. Direct test scoring was refused; holdout remains sealed. See [status](../../VI_EN_RESULTS_V4.13_STATUS.md) and the [aggregate report](../../VI_EN_RESULTS_V4.13_VALIDATION.md).

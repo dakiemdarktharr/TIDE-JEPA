@@ -1,0 +1,119 @@
+{
+  "schema_version": "v433-validation-ai-linguistic-review-v1",
+  "date": "2026-10-08",
+  "pilot_version": "vi-en-ai-v4.33",
+  "provenance": "preliminary AI review of AI-authored synthetic validation outputs; not human/native-speaker validation",
+  "scope": {
+    "split": "validation only",
+    "mode": "TIDE primary",
+    "seeds": [
+      17,
+      23,
+      41
+    ],
+    "languages": [
+      "en",
+      "vi"
+    ],
+    "tasks": [
+      "single",
+      "held_out_path"
+    ],
+    "sample_cases": 48,
+    "strata": 12,
+    "cases_per_seed_language_task_cell": 4,
+    "sampling": "seeded stratified sample; seed 43320261008; shuffled with seed 433",
+    "sample_packet_sha256": "3af4273d31d6878b305446533946419b7617abdcb8819dd7e357cefc3153b018",
+    "release_test_rows_reviewed": false,
+    "phomt_used": false,
+    "raw_or_generated_text_recorded": false
+  },
+  "reviewers": [
+    {
+      "label": "review_a",
+      "model": "gpt-6-luna",
+      "reasoning_effort": "high",
+      "independent": true,
+      "grammar_naturalness": {
+        "acceptable": 47,
+        "minor_issue": 1,
+        "uncertain": 0
+      },
+      "meaning_preservation": {
+        "pass": 48,
+        "fail": 0,
+        "uncertain": 0
+      },
+      "action_fidelity": {
+        "pass": 48,
+        "fail": 0,
+        "uncertain": 0
+      },
+      "minor_issue_category": "spelling typo"
+    },
+    {
+      "label": "review_b",
+      "model": "gpt-6-luna",
+      "reasoning_effort": "high",
+      "independent": true,
+      "grammar_naturalness": {
+        "acceptable": 47,
+        "minor_issue": 1,
+        "uncertain": 0
+      },
+      "meaning_preservation": {
+        "pass": 48,
+        "fail": 0,
+        "uncertain": 0
+      },
+      "action_fidelity": {
+        "pass": 48,
+        "fail": 0,
+        "uncertain": 0
+      },
+      "minor_issue_category": "spelling typo",
+      "confidence": {
+        "english": "high",
+        "fine_grained_vietnamese_idiom": "medium"
+      }
+    }
+  ],
+  "consensus": {
+    "case_level_agreement": "both reviewers independently identified the same one minor spelling issue; both rated meaning preservation and action fidelity as passing for all cases",
+    "english": {
+      "cases": 24,
+      "grammar_naturalness_acceptable": 23,
+      "minor_issues": 1,
+      "meaning_preservation_pass": 24,
+      "action_fidelity_pass": 24
+    },
+    "vietnamese": {
+      "cases": 24,
+      "grammar_naturalness_acceptable": 24,
+      "minor_issues": 0,
+      "meaning_preservation_pass": 24,
+      "action_fidelity_pass": 24
+    },
+    "single": {
+      "cases": 24,
+      "grammar_naturalness_acceptable": 23,
+      "minor_issues": 1,
+      "meaning_preservation_pass": 24,
+      "action_fidelity_pass": 24
+    },
+    "held_out_path": {
+      "cases": 24,
+      "grammar_naturalness_acceptable": 24,
+      "minor_issues": 0,
+      "meaning_preservation_pass": 24,
+      "action_fidelity_pass": 24
+    },
+    "qualitative_note": "Reviewers noted some contextually unusual synthetic event/object pairings while judging candidate meaning and requested actions to remain aligned."
+  },
+  "limitations": [
+    "Small, seeded sample from synthetic validation outputs; not a natural-corpus estimate.",
+    "AI judgments do not establish human/native-speaker validation or naturalness.",
+    "No broad semantic OOD, matched-compute efficacy, or TIDE advantage claim follows.",
+    "One spelling issue remains recorded in frozen v4.33 evidence; do not edit the frozen output or tune against this sample."
+  ]
+}

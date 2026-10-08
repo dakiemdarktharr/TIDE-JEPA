@@ -1,0 +1,96 @@
+{
+  "alignment_pairs_in_batch": 2,
+  "approval_sha256": "b33298a4f0ea1c7de92a81413f67fbfbaee4c0a39fd782adf072f316290824e7",
+  "cham_used": false,
+  "checkpoint_written": false,
+  "config": "tide-decoder-source_pointer-copy-0p0-seed-17.json",
+  "config_sha256": "27015193ee9ea6fef76e8afb5078572881438e00151cff7db3ad4b7e24311ee2",
+  "diagnostic_script_sha256": "a9861424f70f1dc26eb8df2fcd36eaefb9e66d4950ec4747c9fcfe550f3cfaa0",
+  "group_id_sha256": [
+    "e491ea6a8c0707d05352c699ef4350b51f58c1467524d24f9da671c1a6b364d5",
+    "d23a54f285adf5a2230052ab133383a91ab0b5931d2f98dd75db2c22705942b5",
+    "35877951f10a06320c0b9b8643f8e605bda116b9af3b424d601f956b2985ff49",
+    "9286102266c7d49aee52986df589824a6bd4a6b57dbf17735d62875626ef6280"
+  ],
+  "groups_fit": 4,
+  "human_validated": false,
+  "inventory_sha256": "b5d3532da2de6423e3beafd8fa8a5fd4af3c42e953bdd769c859f869cd1f66d4",
+  "phomt_used": false,
+  "pilot_version": "vi-en-ai-v4.32",
+  "protocol_sha256": "c288e9749402282ff27f2279e33ad13b58ee6c96612695ba41711bffcd5b0524",
+  "release_holdout_opened": false,
+  "review_bundle_sha256": "62fe45059d794b2b02091221da9fdad48b9e267a2391703abe21fcc5833f1077",
+  "review_scope": "train-validation-only",
+  "scope": "4 complete event group(s), one train single-action row per language/action bucket",
+  "seed": 613,
+  "steps": 600,
+  "text_emitted": false,
+  "training_curve": [
+    {
+      "step": 0,
+      "train_semantic": {
+        "action_fidelity_pass": 0,
+        "examples": 32,
+        "patient_preserved": 0,
+        "predicate_preserved": 0,
+        "preservation_pass": 0,
+        "terminated_eos": 32,
+        "valid_utf8": 32
+      }
+    },
+    {
+      "loss": 4.33055,
+      "step": 1,
+      "train_semantic": {
+        "action_fidelity_pass": 0,
+        "examples": 32,
+        "patient_preserved": 0,
+        "predicate_preserved": 0,
+        "preservation_pass": 0,
+        "terminated_eos": 32,
+        "valid_utf8": 32
+      }
+    },
+    {
+      "loss": 0.51959,
+      "step": 100,
+      "train_semantic": {
+        "action_fidelity_pass": 3,
+        "examples": 32,
+        "patient_preserved": 2,
+        "predicate_preserved": 2,
+        "preservation_pass": 0,
+        "terminated_eos": 32,
+        "valid_utf8": 32
+      }
+    },
+    {
+      "loss": 0.04674,
+      "step": 300,
+      "train_semantic": {
+        "action_fidelity_pass": 32,
+        "examples": 32,
+        "patient_preserved": 32,
+        "predicate_preserved": 32,
+        "preservation_pass": 32,
+        "terminated_eos": 32,
+        "valid_utf8": 32
+      }
+    },
+    {
+      "loss": 0.00201,
+      "step": 600,
+      "train_semantic": {
+        "action_fidelity_pass": 32,
+        "examples": 32,
+        "patient_preserved": 32,
+        "predicate_preserved": 32,
+        "preservation_pass": 32,
+        "terminated_eos": 32,
+        "valid_utf8": 32
+      }
+    }
+  ],
+  "training_examples": 32,
+  "validation_rows_scored": false
+}

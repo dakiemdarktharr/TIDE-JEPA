@@ -1,0 +1,421 @@
+{
+  "corrected_checker_sha256": "b199eb020735154a153bc8801c1109e06cfe509e1b7a2677fd72f647221d2b85",
+  "human_validated": false,
+  "phomt_used": false,
+  "pilot_version": "vi-en-ai-v4.33",
+  "preliminary": true,
+  "release_holdout_opened": false,
+  "repair": "register compose433 event families in the existing narrow semantic checker",
+  "runs": [
+    {
+      "bucket_summary": {
+        "en/held_out_path": {
+          "buckets": 1,
+          "failed_buckets": 0,
+          "failed_checks": {},
+          "minima": {
+            "action_fidelity_rate": 1.0,
+            "checker_coverage_rate": 1.0,
+            "preservation_rate": 0.96875,
+            "valid_unicode_rate": 1.0
+          }
+        },
+        "en/single": {
+          "buckets": 4,
+          "failed_buckets": 0,
+          "failed_checks": {},
+          "minima": {
+            "action_fidelity_rate": 0.990625,
+            "checker_coverage_rate": 1.0,
+            "preservation_rate": 0.928125,
+            "valid_unicode_rate": 1.0
+          }
+        },
+        "vi/held_out_path": {
+          "buckets": 1,
+          "failed_buckets": 0,
+          "failed_checks": {},
+          "minima": {
+            "action_fidelity_rate": 1.0,
+            "checker_coverage_rate": 1.0,
+            "preservation_rate": 0.99375,
+            "valid_unicode_rate": 1.0
+          }
+        },
+        "vi/single": {
+          "buckets": 4,
+          "failed_buckets": 0,
+          "failed_checks": {},
+          "minima": {
+            "action_fidelity_rate": 1.0,
+            "checker_coverage_rate": 1.0,
+            "preservation_rate": 0.9875,
+            "valid_unicode_rate": 1.0
+          }
+        }
+      },
+      "evidence_identity": {
+        "checkpoint_sha256": "7229c881abbd89b3b3b08b2aac52b65621b07a8293be38d770b6c748af0a7b1e",
+        "config_sha256": "07a0d058b0f78017d540b6d94cb9c6e17714bd50a7c74fb3aa06f1e03f4a5649",
+        "original_metrics_sha256": "58cb2e36bf3a8e33ffffbb90f2bba962a32eacae07ef82fb8a523caad07da70f",
+        "private_validation_generation_sha256": "788bfbca8d78754635a5822190e3f667cb217c7201e8f06741e26555923fdda2",
+        "protocol_sha256": "906bf4a79da38d98e3bf8d7d51d4b94f56ad7d3465c772bdca75efa4fc48b5e8",
+        "resolved_run_sha256": "8d9a8f2be35b84bf95f1cff8c0c5561e64363aa712cfe1e01bfb715ee3e1f4b0"
+      },
+      "gate": "pass",
+      "primary": true,
+      "quality_thresholds": {
+        "held_out_path_action_fidelity_rate": 0.8,
+        "held_out_path_preservation_rate": 0.8,
+        "scope": "each language/action bucket using the narrow synthetic frame checker",
+        "semantic_checker_coverage_rate": 1.0,
+        "single_action_action_fidelity_rate": 0.9,
+        "single_action_preservation_rate": 0.9,
+        "valid_unicode_rate": 1.0
+      },
+      "run": "tide-copy-0p0-seed-17.json"
+    },
+    {
+      "bucket_summary": {
+        "en/held_out_path": {
+          "buckets": 1,
+          "failed_buckets": 0,
+          "failed_checks": {},
+          "minima": {
+            "action_fidelity_rate": 1.0,
+            "checker_coverage_rate": 1.0,
+            "preservation_rate": 0.98125,
+            "valid_unicode_rate": 1.0
+          }
+        },
+        "en/single": {
+          "buckets": 4,
+          "failed_buckets": 0,
+          "failed_checks": {},
+          "minima": {
+            "action_fidelity_rate": 0.996875,
+            "checker_coverage_rate": 1.0,
+            "preservation_rate": 0.94375,
+            "valid_unicode_rate": 1.0
+          }
+        },
+        "vi/held_out_path": {
+          "buckets": 1,
+          "failed_buckets": 0,
+          "failed_checks": {},
+          "minima": {
+            "action_fidelity_rate": 1.0,
+            "checker_coverage_rate": 1.0,
+            "preservation_rate": 0.9875,
+            "valid_unicode_rate": 1.0
+          }
+        },
+        "vi/single": {
+          "buckets": 4,
+          "failed_buckets": 0,
+          "failed_checks": {},
+          "minima": {
+            "action_fidelity_rate": 0.990625,
+            "checker_coverage_rate": 1.0,
+            "preservation_rate": 0.978125,
+            "valid_unicode_rate": 1.0
+          }
+        }
+      },
+      "evidence_identity": {
+        "checkpoint_sha256": "17b24cac63750fe05aee196aa3c02f6a3c515a2d4410a2e60edd6885116158b8",
+        "config_sha256": "87204a762638591b0303553048b2b70b07d1999f3954a91d829588a399987bec",
+        "original_metrics_sha256": "7565e9d4e4dab51515b172935ad4e93505ddc3bc0963f5fac246a9ef1a7e5ba6",
+        "private_validation_generation_sha256": "c02a40db9652e57fdfbbc58c0cb612ae59722375842fe9976c0231c587f81b60",
+        "protocol_sha256": "906bf4a79da38d98e3bf8d7d51d4b94f56ad7d3465c772bdca75efa4fc48b5e8",
+        "resolved_run_sha256": "46c44a01203926124f69e94f1514769994c1ba90ca32160f8b99d87dfb5609fa"
+      },
+      "gate": "control_only",
+      "primary": false,
+      "quality_thresholds": {
+        "held_out_path_action_fidelity_rate": 0.8,
+        "held_out_path_preservation_rate": 0.8,
+        "scope": "each language/action bucket using the narrow synthetic frame checker",
+        "semantic_checker_coverage_rate": 1.0,
+        "single_action_action_fidelity_rate": 0.9,
+        "single_action_preservation_rate": 0.9,
+        "valid_unicode_rate": 1.0
+      },
+      "run": "token_only-copy-0p0-seed-17.json"
+    },
+    {
+      "bucket_summary": {
+        "en/held_out_path": {
+          "buckets": 1,
+          "failed_buckets": 0,
+          "failed_checks": {},
+          "minima": {
+            "action_fidelity_rate": 1.0,
+            "checker_coverage_rate": 1.0,
+            "preservation_rate": 0.9875,
+            "valid_unicode_rate": 1.0
+          }
+        },
+        "en/single": {
+          "buckets": 4,
+          "failed_buckets": 0,
+          "failed_checks": {},
+          "minima": {
+            "action_fidelity_rate": 0.996875,
+            "checker_coverage_rate": 1.0,
+            "preservation_rate": 0.95,
+            "valid_unicode_rate": 1.0
+          }
+        },
+        "vi/held_out_path": {
+          "buckets": 1,
+          "failed_buckets": 0,
+          "failed_checks": {},
+          "minima": {
+            "action_fidelity_rate": 0.99375,
+            "checker_coverage_rate": 1.0,
+            "preservation_rate": 1.0,
+            "valid_unicode_rate": 1.0
+          }
+        },
+        "vi/single": {
+          "buckets": 4,
+          "failed_buckets": 0,
+          "failed_checks": {},
+          "minima": {
+            "action_fidelity_rate": 0.996875,
+            "checker_coverage_rate": 1.0,
+            "preservation_rate": 0.990625,
+            "valid_unicode_rate": 1.0
+          }
+        }
+      },
+      "evidence_identity": {
+        "checkpoint_sha256": "bb75b77a5fa36692f0f94e1ef770cda4aa505e6d7333a9b5e62e92d35d1c9dde",
+        "config_sha256": "b6a0173239140b8627a84f410e919bea3fdf91af1b435235bd810c6d7e945685",
+        "original_metrics_sha256": "052c236d43d1b6b2e86b54143d98f370c9fe9aa5f23dcab0070d884af87debcb",
+        "private_validation_generation_sha256": "53dc256631f6231d9f1c1d4275fc996cbcd699cc1733ab0375f0be171aa15c41",
+        "protocol_sha256": "906bf4a79da38d98e3bf8d7d51d4b94f56ad7d3465c772bdca75efa4fc48b5e8",
+        "resolved_run_sha256": "0bb28a536b91d3af8755e4b2235250e5be7bd1c80f3e07e0642bb7cdc7079caa"
+      },
+      "gate": "pass",
+      "primary": true,
+      "quality_thresholds": {
+        "held_out_path_action_fidelity_rate": 0.8,
+        "held_out_path_preservation_rate": 0.8,
+        "scope": "each language/action bucket using the narrow synthetic frame checker",
+        "semantic_checker_coverage_rate": 1.0,
+        "single_action_action_fidelity_rate": 0.9,
+        "single_action_preservation_rate": 0.9,
+        "valid_unicode_rate": 1.0
+      },
+      "run": "tide-copy-0p0-seed-23.json"
+    },
+    {
+      "bucket_summary": {
+        "en/held_out_path": {
+          "buckets": 1,
+          "failed_buckets": 0,
+          "failed_checks": {},
+          "minima": {
+            "action_fidelity_rate": 1.0,
+            "checker_coverage_rate": 1.0,
+            "preservation_rate": 0.9875,
+            "valid_unicode_rate": 1.0
+          }
+        },
+        "en/single": {
+          "buckets": 4,
+          "failed_buckets": 0,
+          "failed_checks": {},
+          "minima": {
+            "action_fidelity_rate": 0.996875,
+            "checker_coverage_rate": 1.0,
+            "preservation_rate": 0.965625,
+            "valid_unicode_rate": 1.0
+          }
+        },
+        "vi/held_out_path": {
+          "buckets": 1,
+          "failed_buckets": 0,
+          "failed_checks": {},
+          "minima": {
+            "action_fidelity_rate": 1.0,
+            "checker_coverage_rate": 1.0,
+            "preservation_rate": 1.0,
+            "valid_unicode_rate": 1.0
+          }
+        },
+        "vi/single": {
+          "buckets": 4,
+          "failed_buckets": 0,
+          "failed_checks": {},
+          "minima": {
+            "action_fidelity_rate": 1.0,
+            "checker_coverage_rate": 1.0,
+            "preservation_rate": 0.99375,
+            "valid_unicode_rate": 1.0
+          }
+        }
+      },
+      "evidence_identity": {
+        "checkpoint_sha256": "ce9a0b863fc5acdd1f4bacf92c9ae103044dac913f7e3a16fd3c2cb4e1426e82",
+        "config_sha256": "d95ff876940451113e79b47a800dc938dee0c0b2fb4e6add0fd83090a1b541b7",
+        "original_metrics_sha256": "534b320215c85408ff604df71360cabad4fcbed1455261eb050b6ec2cb771ca0",
+        "private_validation_generation_sha256": "363447596d25fe15e0934fa13eac54dfeaa6381a6355f6728cbe624d194e72b5",
+        "protocol_sha256": "906bf4a79da38d98e3bf8d7d51d4b94f56ad7d3465c772bdca75efa4fc48b5e8",
+        "resolved_run_sha256": "41b7c8f9d05d5a178b0109ce42f37bc6b765b5cf365d1d7d4961810e00bf3046"
+      },
+      "gate": "control_only",
+      "primary": false,
+      "quality_thresholds": {
+        "held_out_path_action_fidelity_rate": 0.8,
+        "held_out_path_preservation_rate": 0.8,
+        "scope": "each language/action bucket using the narrow synthetic frame checker",
+        "semantic_checker_coverage_rate": 1.0,
+        "single_action_action_fidelity_rate": 0.9,
+        "single_action_preservation_rate": 0.9,
+        "valid_unicode_rate": 1.0
+      },
+      "run": "token_only-copy-0p0-seed-23.json"
+    },
+    {
+      "bucket_summary": {
+        "en/held_out_path": {
+          "buckets": 1,
+          "failed_buckets": 0,
+          "failed_checks": {},
+          "minima": {
+            "action_fidelity_rate": 1.0,
+            "checker_coverage_rate": 1.0,
+            "preservation_rate": 1.0,
+            "valid_unicode_rate": 1.0
+          }
+        },
+        "en/single": {
+          "buckets": 4,
+          "failed_buckets": 0,
+          "failed_checks": {},
+          "minima": {
+            "action_fidelity_rate": 0.99375,
+            "checker_coverage_rate": 1.0,
+            "preservation_rate": 0.940625,
+            "valid_unicode_rate": 1.0
+          }
+        },
+        "vi/held_out_path": {
+          "buckets": 1,
+          "failed_buckets": 0,
+          "failed_checks": {},
+          "minima": {
+            "action_fidelity_rate": 1.0,
+            "checker_coverage_rate": 1.0,
+            "preservation_rate": 1.0,
+            "valid_unicode_rate": 1.0
+          }
+        },
+        "vi/single": {
+          "buckets": 4,
+          "failed_buckets": 0,
+          "failed_checks": {},
+          "minima": {
+            "action_fidelity_rate": 0.996875,
+            "checker_coverage_rate": 1.0,
+            "preservation_rate": 0.9875,
+            "valid_unicode_rate": 1.0
+          }
+        }
+      },
+      "evidence_identity": {
+        "checkpoint_sha256": "94e35ce171cd0631fa150a92e3d8766691b260759f476c17e70cda69e22d7556",
+        "config_sha256": "dd5bb2fa17c8a7b8d9e7fa5f5128e4fe3ac1a50639c5b5661531864922b34942",
+        "original_metrics_sha256": "f26aee05398ded928d815b9e7446ad7337588e2f8a8001aa912bdaf1665202df",
+        "private_validation_generation_sha256": "21d29e53bf9b4103afccfd0e7b597d348ab493d87e5800327ea60f51c2330e6f",
+        "protocol_sha256": "906bf4a79da38d98e3bf8d7d51d4b94f56ad7d3465c772bdca75efa4fc48b5e8",
+        "resolved_run_sha256": "b9efd817b93c18d6d5541c8591ec7d1ff08f66a71af8eda19619f4903700e68d"
+      },
+      "gate": "pass",
+      "primary": true,
+      "quality_thresholds": {
+        "held_out_path_action_fidelity_rate": 0.8,
+        "held_out_path_preservation_rate": 0.8,
+        "scope": "each language/action bucket using the narrow synthetic frame checker",
+        "semantic_checker_coverage_rate": 1.0,
+        "single_action_action_fidelity_rate": 0.9,
+        "single_action_preservation_rate": 0.9,
+        "valid_unicode_rate": 1.0
+      },
+      "run": "tide-copy-0p0-seed-41.json"
+    },
+    {
+      "bucket_summary": {
+        "en/held_out_path": {
+          "buckets": 1,
+          "failed_buckets": 0,
+          "failed_checks": {},
+          "minima": {
+            "action_fidelity_rate": 1.0,
+            "checker_coverage_rate": 1.0,
+            "preservation_rate": 0.98125,
+            "valid_unicode_rate": 1.0
+          }
+        },
+        "en/single": {
+          "buckets": 4,
+          "failed_buckets": 0,
+          "failed_checks": {},
+          "minima": {
+            "action_fidelity_rate": 0.996875,
+            "checker_coverage_rate": 1.0,
+            "preservation_rate": 0.96875,
+            "valid_unicode_rate": 1.0
+          }
+        },
+        "vi/held_out_path": {
+          "buckets": 1,
+          "failed_buckets": 0,
+          "failed_checks": {},
+          "minima": {
+            "action_fidelity_rate": 1.0,
+            "checker_coverage_rate": 1.0,
+            "preservation_rate": 1.0,
+            "valid_unicode_rate": 1.0
+          }
+        },
+        "vi/single": {
+          "buckets": 4,
+          "failed_buckets": 0,
+          "failed_checks": {},
+          "minima": {
+            "action_fidelity_rate": 0.996875,
+            "checker_coverage_rate": 1.0,
+            "preservation_rate": 0.990625,
+            "valid_unicode_rate": 1.0
+          }
+        }
+      },
+      "evidence_identity": {
+        "checkpoint_sha256": "14a02b115cc7be3c1da7cae87ea190d4f17c284c51a91c0bc85ea872c45cc8b3",
+        "config_sha256": "a7c4dc99b4ea5feecce53885127f2bc55a1d74228bea37d27396a76de05a4c9b",
+        "original_metrics_sha256": "d44d7a7bedfb2f19573e4549a193a36e057e07a112ca07fd91a8072e58c620ad",
+        "private_validation_generation_sha256": "51ae2503d8f87a6b52bd431bb1d556fee1670e72510c68de4a2503b8b0db2b14",
+        "protocol_sha256": "906bf4a79da38d98e3bf8d7d51d4b94f56ad7d3465c772bdca75efa4fc48b5e8",
+        "resolved_run_sha256": "5cc786084af47d6b11a1f05f97cefcd986c7e631e68de9b283312d4bbf17cad2"
+      },
+      "gate": "control_only",
+      "primary": false,
+      "quality_thresholds": {
+        "held_out_path_action_fidelity_rate": 0.8,
+        "held_out_path_preservation_rate": 0.8,
+        "scope": "each language/action bucket using the narrow synthetic frame checker",
+        "semantic_checker_coverage_rate": 1.0,
+        "single_action_action_fidelity_rate": 0.9,
+        "single_action_preservation_rate": 0.9,
+        "valid_unicode_rate": 1.0
+      },
+      "run": "token_only-copy-0p0-seed-41.json"
+    }
+  ],
+  "schema_version": "v433-semantic-checker-reassessment-v1",
+  "scope": "cached validation generations only; generated text was not changed or emitted"
+}

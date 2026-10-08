@@ -1,0 +1,44 @@
+{
+  "date": "2026-10-08",
+  "limitations": [
+    "snapshot reflects the current uncommitted working tree, not a committed revision",
+    "the temporary virtualenv from the pinned-lock bootstrap was reused",
+    "clean OS image provisioning and CUDA/GPU behavior remain unverified",
+    "loopback HTTP tests require host permission outside the default sandbox"
+  ],
+  "lock": {
+    "environment": "/tmp/tide-jepa-v433-lock-venv",
+    "path": "requirements-lock-linux-py311-cpu.txt",
+    "pip_check": "passed",
+    "sha256": "f1c9c112c3ede9aa78798c1463d1def80438e303b7ff5032896e49a9d38509b9"
+  },
+  "platform": {
+    "architecture": "x86_64",
+    "cuda_available": false,
+    "kernel": "7.2.8-arch1-2",
+    "os": "Arch Linux",
+    "python": "3.11.17",
+    "pytorch": "2.14.0+cpu"
+  },
+  "schema_version": "linux-source-only-reproduction-v1",
+  "source_snapshot": {
+    "compiled_pycache_generated_after_suite": true,
+    "git_metadata_present": false,
+    "ignored_data_present": false,
+    "ignored_runs_present": false,
+    "path": "/tmp/tide-jepa-v433-clean-source-20261008-final2",
+    "project_venv_present": false,
+    "source_paths_copied": 217
+  },
+  "verification": {
+    "benchmark_and_boundary_scripts_included": true,
+    "command": "/tmp/tide-jepa-v433-lock-venv/bin/python -B -m unittest discover -s tests -q",
+    "compileall": "passed (tide_jepa scripts tests)",
+    "human_review_summarizer_included": true,
+    "pip_check": "passed",
+    "unittest_count": 150,
+    "unittest_duration_seconds": 141.616,
+    "unittest_result": "passed; full suite completed with host loopback permission",
+    "unittest_skipped": 0
+  }
+}

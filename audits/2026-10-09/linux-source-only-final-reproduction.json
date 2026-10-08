@@ -1,0 +1,131 @@
+{
+  "date": "2026-10-09",
+  "limitations": [
+    "snapshot reflects the current uncommitted working tree, not a committed revision",
+    "a fresh virtualenv was created on the existing Arch Linux host; this is not a clean OS image or committed checkout",
+    "clean OS image provisioning and CUDA/GPU behavior remain unverified",
+    "loopback HTTP tests require host permission outside the default sandbox"
+  ],
+  "lock": {
+    "environment": "/tmp/tide-jepa-v433-lock-venv-fresh-20261009",
+    "path": "requirements-lock-linux-py311-cpu.txt",
+    "pip_check": "passed",
+    "sha256": "f1c9c112c3ede9aa78798c1463d1def80438e303b7ff5032896e49a9d38509b9"
+  },
+  "platform": {
+    "architecture": "x86_64",
+    "cuda_available": false,
+    "kernel": "7.2.8-arch1-2",
+    "os": "Arch Linux",
+    "python": "3.11.17",
+    "pytorch": "2.14.0+cpu"
+  },
+  "schema_version": "linux-source-only-reproduction-v1",
+  "source_snapshot": {
+    "compiled_pycache_generated_after_suite": true,
+    "git_metadata_present": false,
+    "ignored_data_present": false,
+    "ignored_runs_present": false,
+    "path": "/tmp/tide-jepa-v433-clean-source-20261009-concurrent",
+    "project_venv_present": false,
+    "source_paths_copied": 219
+  },
+  "verification": {
+    "benchmark_boundary_and_human_review_tools_included": true,
+    "command": "/tmp/tide-jepa-v433-lock-venv-fresh-20261009/bin/python -B -m unittest discover -s tests -q",
+    "compileall": "passed (tide_jepa scripts tests)",
+    "human_review_summary_regression_tests_included": true,
+    "pip_check": "passed",
+    "unittest_count": 154,
+    "unittest_duration_seconds": 131.333,
+    "unittest_result": "passed; full suite completed with host loopback permission in a freshly created pinned-lock virtualenv",
+    "unittest_skipped": 0,
+    "numpy_warning": "PyTorch emitted a non-fatal warning because NumPy is not in the pinned CPU lock; all tests passed",
+    "concurrent_demo_benchmark_included": true,
+    "varied_train_demo_benchmark_included": true,
+    "varied_train_narrow_checker_scoring_included": true
+  },
+  "demo_concurrency": {
+    "scope": "approved page-default request only; aggregate metrics; no request or generated text recorded",
+    "workers": 4,
+    "requests_per_run": 80,
+    "behavior": "The server permits one inference at a time and returns schema-valid HTTP 503 busy refusals while that slot is occupied. Both runs returned only HTTP 200 or expected schema-valid HTTP 503.",
+    "run_1": {
+      "report": "audits/2026-10-09/v433_demo_concurrent_bound.json",
+      "http_status_counts": {
+        "200": 1,
+        "503": 79
+      },
+      "rss_first_kib": 85724,
+      "rss_last_kib": 87380,
+      "p95_ms": 2.84,
+      "bounded_concurrency_behavior": true
+    },
+    "run_2": {
+      "report": "audits/2026-10-09/v433_demo_concurrent_bound_repeat.json",
+      "http_status_counts": {
+        "200": 1,
+        "503": 79
+      },
+      "rss_first_kib": 87380,
+      "rss_last_kib": 87492,
+      "p95_ms": 2.639,
+      "bounded_concurrency_behavior": true
+    },
+    "limitations": [
+      "only the exact approved page-default request was exercised",
+      "two short runs do not establish production capacity or general memory stability",
+      "concurrent callers may receive HTTP 503 and must retry"
+    ]
+  },
+  "demo_varied_train_inputs": {
+    "scope": "exact approved v4.33 train-only inputs; AI-authored synthetic data; same-language; source/generated text omitted",
+    "unique_candidates": 64,
+    "candidate_counts": {
+      "en": 32,
+      "vi": 32,
+      "single_action": 32,
+      "two_action_path": 32
+    },
+    "requests_per_run": 40,
+    "requests_sent_per_run": {
+      "en": 20,
+      "vi": 20,
+      "single_action": 20,
+      "two_action_path": 20
+    },
+    "run_1": {
+      "report": "audits/2026-10-09/v433_demo_varied_quality_benchmark_1.json",
+      "http_status_counts": {
+        "200": 40
+      },
+      "valid_utf8": 40,
+      "nonempty_diagnostic_outputs": 40,
+      "checker_coverage": 40,
+      "action_fidelity_pass": 40,
+      "preservation_pass": 40,
+      "rss_first_kib": 88904,
+      "rss_last_kib": 88904,
+      "p95_ms": 109.657
+    },
+    "run_2": {
+      "report": "audits/2026-10-09/v433_demo_varied_quality_benchmark_2.json",
+      "http_status_counts": {
+        "200": 40
+      },
+      "valid_utf8": 40,
+      "nonempty_diagnostic_outputs": 40,
+      "checker_coverage": 40,
+      "action_fidelity_pass": 40,
+      "preservation_pass": 40,
+      "rss_first_kib": 88904,
+      "rss_last_kib": 88908,
+      "p95_ms": 104.249
+    },
+    "limitations": [
+      "10 examples per language/task cell in each pass; repeated observations are not independent samples",
+      "synthetic training examples only; this is not validation or natural-corpus quality evidence",
+      "bounded repeated requests do not establish production capacity"
+    ]
+  }
+}

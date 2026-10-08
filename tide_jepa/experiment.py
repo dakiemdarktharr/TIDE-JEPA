@@ -6,7 +6,9 @@ never downloads data, changes approval metadata, or scores the held-out test set
 
 import argparse
 import csv
+from contextlib import contextmanager
 from dataclasses import asdict, replace
+import errno
 import hashlib
 import json
 import math
@@ -25,7 +27,6 @@ from tide_jepa.data import (
     grouped_split,
     read_jsonl,
     read_split_manifest,
-    write_split_manifest,
 )
 from tide_jepa.model import TIDEJEPA
 from tide_jepa.schema import Action, EdgePair, Inventory, PathPair
@@ -68,6 +69,17 @@ def _runtime_identity() -> dict:
     return {"python": sys.version, "torch": torch.__version__}
 
 
+def _fsync_directory(path: Path) -> None:
+    """Persist directory-entry changes on POSIX after atomic replacement."""
+    if os.name == "nt":
+        return
+    descriptor = os.open(path, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+    try:
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
+
+
 def _atomic_json(path: Path, value: object) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     descriptor, temporary = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
@@ -75,7 +87,10 @@ def _atomic_json(path: Path, value: object) -> None:
         with os.fdopen(descriptor, "w", encoding="utf-8", newline="\n") as stream:
             json.dump(value, stream, ensure_ascii=False, sort_keys=True, indent=2)
             stream.write("\n")
+            stream.flush()
+            os.fsync(stream.fileno())
         os.replace(temporary, path)
+        _fsync_directory(path.parent)
     except BaseException:
         try:
             os.unlink(temporary)
@@ -91,13 +106,31 @@ def _write_csv_atomic(path: Path, header: tuple[str, ...], rows) -> None:
             writer = csv.writer(stream)
             writer.writerow(header)
             writer.writerows(rows)
+            stream.flush()
+            os.fsync(stream.fileno())
         os.replace(temporary, path)
+        _fsync_directory(path.parent)
     except BaseException:
         try:
             os.unlink(temporary)
         except FileNotFoundError:
             pass
         raise
+
+
+def _cleanup_orphaned_publications(output_dir: Path) -> None:
+    """Remove only known atomic-writer temps while holding this run's lock."""
+    if not output_dir.is_dir():
+        return
+    targets = ("resolved_run.json", "split_manifest.json", "metrics.csv", "latest.pt", "best.pt")
+    removed = False
+    for name in targets:
+        for temporary in output_dir.glob(f".{name}.*"):
+            if temporary.is_file() and not temporary.is_symlink():
+                temporary.unlink()
+                removed = True
+    if removed:
+        _fsync_directory(output_dir)
 
 
 def _reconcile_metrics_log(path: Path, checkpoint_epoch: int) -> None:
@@ -138,6 +171,70 @@ def _append_metrics_rows(path: Path, new_rows) -> None:
         header = tuple(next(reader))
         rows = list(reader)
     _write_csv_atomic(path, header, rows + new_rows)
+
+
+def _preserve_uncheckpointed_metrics(path: Path) -> None:
+    """Archive metrics written before the first durable checkpoint, then clear the live log."""
+    if not path.is_file():
+        return
+    content = path.read_bytes()
+    digest = hashlib.sha256(content).hexdigest()
+    archived = path.with_name(f"{path.stem}.uncheckpointed-{digest}{path.suffix}")
+    if archived.exists():
+        if archived.read_bytes() != content:
+            raise RuntimeError("uncheckpointed metrics archive hash collision")
+        path.unlink()
+        _fsync_directory(path.parent)
+    else:
+        os.replace(path, archived)
+        _fsync_directory(path.parent)
+
+
+@contextmanager
+def _output_directory_lock(output_dir: Path):
+    """Hold an OS-released exclusive lock for one training output directory."""
+    user_scope = str(os.getuid()) if hasattr(os, "getuid") else hashlib.sha256(
+        str(Path.home()).encode("utf-8")
+    ).hexdigest()[:16]
+    lock_root = Path(tempfile.gettempdir()) / f"tide-jepa-run-locks-{user_scope}"
+    lock_root.mkdir(mode=0o700, parents=True, exist_ok=True)
+    try:
+        os.chmod(lock_root, 0o700)
+    except OSError:
+        pass
+    lock_key = hashlib.sha256(str(output_dir.resolve()).encode("utf-8")).hexdigest()
+    lock_path = lock_root / f"{lock_key}.lock"
+    descriptor = os.open(lock_path, os.O_CREAT | os.O_RDWR, 0o600)
+    acquired = False
+    windows_locking = None
+    try:
+        if os.name == "nt":
+            import msvcrt
+            windows_locking = msvcrt
+            if os.fstat(descriptor).st_size == 0:
+                os.write(descriptor, b"\0")
+            os.lseek(descriptor, 0, os.SEEK_SET)
+            msvcrt.locking(descriptor, msvcrt.LK_NBLCK, 1)
+        else:
+            import fcntl
+            fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        acquired = True
+    except OSError as exc:
+        os.close(descriptor)
+        if exc.errno in {errno.EACCES, errno.EAGAIN, errno.EDEADLK}:
+            raise RuntimeError("another training process holds this output-directory lock") from exc
+        raise
+    try:
+        yield
+    finally:
+        if acquired:
+            if windows_locking is not None:
+                os.lseek(descriptor, 0, os.SEEK_SET)
+                windows_locking.locking(descriptor, windows_locking.LK_UNLCK, 1)
+            else:
+                import fcntl
+                fcntl.flock(descriptor, fcntl.LOCK_UN)
+        os.close(descriptor)
 
 
 def _batch_records(records, batch_size: int, *, shuffle_seed: int | None = None):
@@ -294,7 +391,10 @@ def _save_checkpoint(path: Path, state: dict) -> None:
     os.close(descriptor)
     try:
         torch.save(state, temporary)
+        with open(temporary, "rb") as stream:
+            os.fsync(stream.fileno())
         os.replace(temporary, path)
+        _fsync_directory(path.parent)
     except BaseException:
         try:
             os.unlink(temporary)
@@ -303,7 +403,7 @@ def _save_checkpoint(path: Path, state: dict) -> None:
         raise
 
 
-def run_experiment(
+def _run_experiment_unlocked(
     config_path: str | Path,
     *,
     resume: bool = False,
@@ -410,17 +510,32 @@ def run_experiment(
     identity_hash = _canonical_hash(run_identity)
     resume_state = None
     if resume:
-        if not (output_dir / "latest.pt").is_file():
-            raise FileNotFoundError("cannot resume; latest checkpoint not found")
-        resume_state = torch.load(output_dir / "latest.pt", map_location="cpu", weights_only=True)
-        if resume_state.get("run_sha256") != identity_hash:
-            raise ValueError("checkpoint run identity differs from the current config/data/split")
-        if "torch_rng_state" not in resume_state or "python_rng_state" not in resume_state:
-            raise ValueError("checkpoint lacks RNG state required for reproducible resume")
-        if not (output_dir / "metrics.csv").is_file():
-            raise FileNotFoundError("cannot resume; metrics log not found")
+        latest_path = output_dir / "latest.pt"
+        best_path = output_dir / "best.pt"
+        log_path = output_dir / "metrics.csv"
+        if not latest_path.is_file():
+            if best_path.is_file():
+                raise FileNotFoundError("cannot resume; latest checkpoint is missing but best exists")
+            resolved_path = output_dir / "resolved_run.json"
+            if not resolved_path.is_file() or _read_json(resolved_path).get("run_sha256") != identity_hash:
+                raise ValueError("uncheckpointed output identity differs from the current config/data/split")
+            # With no checkpoint, there is no durable model/optimizer state.
+            # Preserve orphaned metrics when present; if the initial log header
+            # was never published, restart from the frozen seed as well.
+            if log_path.is_file():
+                _preserve_uncheckpointed_metrics(log_path)
+            resume = False
+        else:
+            resume_state = torch.load(latest_path, map_location="cpu", weights_only=True)
+            if resume_state.get("run_sha256") != identity_hash:
+                raise ValueError("checkpoint run identity differs from the current config/data/split")
+            if "torch_rng_state" not in resume_state or "python_rng_state" not in resume_state:
+                raise ValueError("checkpoint lacks RNG state required for reproducible resume")
+            if not log_path.is_file():
+                raise FileNotFoundError("cannot resume; metrics log not found")
     if not resume and any((output_dir / name).exists() for name in ("latest.pt", "best.pt", "metrics.csv")):
         raise FileExistsError("run output already contains results; resume or choose a new directory")
+    _cleanup_orphaned_publications(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     _atomic_json(output_dir / "resolved_run.json", {
         **run_identity,
@@ -433,7 +548,7 @@ def run_experiment(
         "objective": asdict(objective),
         "split_counts": {name: len(rows) for name, rows in split_records.items()},
     })
-    write_split_manifest(output_dir / "split_manifest.json", manifest)
+    _atomic_json(output_dir / "split_manifest.json", manifest.to_dict())
 
     random.seed(seed)
     torch.manual_seed(seed)
@@ -639,6 +754,29 @@ def run_experiment(
         result["test_metrics"] = test_metrics
         result["test_evaluated"] = True
     return result
+
+
+def run_experiment(
+    config_path: str | Path,
+    *,
+    resume: bool = False,
+    evaluate_test: bool = False,
+    device: str = "auto",
+) -> dict:
+    """Serialize writers for one output directory before any run artifact is touched."""
+    config_path = Path(config_path).resolve()
+    config = _read_json(config_path)
+    output_name = config.get("output_dir")
+    if not isinstance(output_name, str):
+        # Preserve the implementation's established missing/invalid-setting errors.
+        return _run_experiment_unlocked(
+            config_path, resume=resume, evaluate_test=evaluate_test, device=device
+        )
+    output_dir = (config_path.parent / output_name).resolve()
+    with _output_directory_lock(output_dir):
+        return _run_experiment_unlocked(
+            config_path, resume=resume, evaluate_test=evaluate_test, device=device
+        )
 
 
 def main() -> None:

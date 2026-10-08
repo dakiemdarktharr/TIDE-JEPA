@@ -1,0 +1,55 @@
+{
+  "schema_version": "phomt-current-availability-v2",
+  "date": "2026-10-08",
+  "workspace": "/home/koi/src/RMIT_HACKATHON",
+  "archive_path": "data/raw/phomt/PhoMT.zip",
+  "archive_present": true,
+  "archive_bytes": 355890192,
+  "archive_sha256": "fd58972b5058b17d0823b78e6ce7dbb775243e156efa2ca222079dbdd76e6a2e",
+  "revision": "aee99d07f0f5e6faf64b64f52adf314563350ce5",
+  "archive_git_ignored": true,
+  "pinned_url_unauthenticated_head_status": 401,
+  "authenticated_browser_download_completed": true,
+  "browser_download_source_revision_pinned": true,
+  "terms_accepted": false,
+  "credentials_read_or_exported": false,
+  "archive_metadata": {
+    "crc_checked": true,
+    "member_count": 22,
+    "file_count": 13,
+    "uncompressed_bytes": 1064737892,
+    "extensions": {
+      ".en": 6,
+      ".md": 1,
+      ".vi": 6
+    },
+    "duplicate_names": 0,
+    "unsafe_paths": 0,
+    "encrypted_members": 0,
+    "pickle_suffix_members": 0,
+    "platform_pickle_warning_present": true
+  },
+  "source_selection": {
+    "output_dir": "data/pilot/vi-en-ai-phomt-source-v1",
+    "output_git_ignored": true,
+    "source_split": "train",
+    "members_streamed": [
+      "PhoMT/detokenization/train/train.en",
+      "PhoMT/detokenization/train/train.vi"
+    ],
+    "train_pair_count": 2977999,
+    "eligible_pair_count": 2944299,
+    "selected_pending_packets": 160,
+    "seed": 20261001,
+    "packets_sha256": "2669c7c29c56d45720c02b39247cd6aa8fc76eb829bfcac52501d84c9ad146fd",
+    "approval_status": "pending",
+    "action_labels_inferred": false,
+    "training_approved": false,
+    "dev_test_members_read": false
+  },
+  "source_rows_written_to_git_ignored_data": true,
+  "source_rows_in_chat_or_logs": false,
+  "archive_extracted": false,
+  "archive_deserialized_or_executed": false,
+  "limitation": "PhoMT translation pairs are not semantic-action labels. Selected source packets need semantic grouping and approved AI/human review before any transformation labels, training, or evaluation."
+}

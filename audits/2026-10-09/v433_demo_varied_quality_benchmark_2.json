@@ -1,0 +1,101 @@
+{
+  "all_requests_passed": true,
+  "batch_elapsed_seconds": 4.278,
+  "bounded_concurrency_behavior": true,
+  "concurrent_clients": 1,
+  "date": "2026-10-09",
+  "diagnostic_only_responses": 40,
+  "expected_overload_refusals": 0,
+  "http_status_counts": {
+    "200": 40
+  },
+  "human_validated": false,
+  "latency_ms": {
+    "max": 124.603,
+    "mean": 89.323,
+    "p50": 89.08,
+    "p95": 104.249,
+    "p99": 124.603
+  },
+  "listener_identity_verified": true,
+  "narrow_checker_summary": {
+    "en/single_action": {
+      "action_fidelity_pass": 10,
+      "action_fidelity_rate": 1.0,
+      "checker_coverage": 10,
+      "examples": 10,
+      "preservation_pass": 10,
+      "preservation_rate": 1.0
+    },
+    "en/two_action_path": {
+      "action_fidelity_pass": 10,
+      "action_fidelity_rate": 1.0,
+      "checker_coverage": 10,
+      "examples": 10,
+      "preservation_pass": 10,
+      "preservation_rate": 1.0
+    },
+    "vi/single_action": {
+      "action_fidelity_pass": 10,
+      "action_fidelity_rate": 1.0,
+      "checker_coverage": 10,
+      "examples": 10,
+      "preservation_pass": 10,
+      "preservation_rate": 1.0
+    },
+    "vi/two_action_path": {
+      "action_fidelity_pass": 10,
+      "action_fidelity_rate": 1.0,
+      "checker_coverage": 10,
+      "examples": 10,
+      "preservation_pass": 10,
+      "preservation_rate": 1.0
+    }
+  },
+  "nonempty_outputs": 40,
+  "overload_refusal_schema_valid": 0,
+  "phomt_used": false,
+  "request_count": 40,
+  "request_source": "page-default; text omitted from report",
+  "request_variation": {
+    "action_step_counts": {
+      "1": 32,
+      "2": 32
+    },
+    "request_body_bytes_max": 252,
+    "request_body_bytes_min": 186,
+    "requests_sent_by_action_steps": {
+      "1": 20,
+      "2": 20
+    },
+    "requests_sent_by_language": {
+      "en": 20,
+      "vi": 20
+    },
+    "requests_sent_by_task": {
+      "single_action": 20,
+      "two_action_path": 20
+    },
+    "source": "approved v4.33 train split",
+    "source_languages": {
+      "en": 32,
+      "vi": 32
+    },
+    "text_recorded": false,
+    "unique_candidates": 64
+  },
+  "schema_version": "v433-demo-runtime-benchmark-v1",
+  "server_pid_found": true,
+  "server_rss_first_kib": 88904,
+  "server_rss_kib_samples": [
+    88904,
+    88904,
+    88908,
+    88908
+  ],
+  "server_rss_last_kib": 88908,
+  "service": "loopback v4.33 diagnostic demo",
+  "source_or_generated_text_recorded": false,
+  "throughput_requests_per_second": 9.35,
+  "valid_utf8_responses": 40
+}

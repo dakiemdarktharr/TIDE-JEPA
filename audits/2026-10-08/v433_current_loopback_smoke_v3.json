@@ -1,0 +1,14 @@
+{
+  "schema_version": "v433-current-loopback-smoke-v3",
+  "timestamp_utc": "2026-10-08T15:58:13Z",
+  "approved_train_request_http_status": 200,
+  "response_valid_json": true,
+  "valid_utf8": true,
+  "narrow_checker_coverage": true,
+  "narrow_checker_action_fidelity": true,
+  "narrow_checker_preservation": true,
+  "quality_status": "diagnostic_only",
+  "human_validated": false,
+  "source_or_generated_text_recorded": false,
+  "elapsed_seconds": 0.709
+}

@@ -1,0 +1,57 @@
+{
+  "schema_version": "linux-cpu-lock-bootstrap-v1",
+  "date": "2026-10-08",
+  "platform": {
+    "os": "Arch Linux",
+    "kernel": "7.2.8-arch1-2",
+    "architecture": "x86_64",
+    "cpu_model": "AMD Ryzen 5 4600H with Radeon Graphics",
+    "logical_cpus": 12,
+    "python": "3.11.17",
+    "pytorch": "2.14.0+cpu",
+    "cuda_available": false
+  },
+  "lock": {
+    "path": "requirements-lock-linux-py311-cpu.txt",
+    "sha256": "f1c9c112c3ede9aa78798c1463d1def80438e303b7ff5032896e49a9d38509b9",
+    "fresh_temporary_virtualenv": true,
+    "pip_check": "passed"
+  },
+  "source_scope": "source-only snapshot updated with the current experiment/data/test changes; .git, .venv, ignored data/, and ignored runs/ were excluded",
+  "source_snapshot": {
+    "git_visible_paths_copied": 197,
+    "path": "/tmp/tide-jepa-v433-clean-source-20261008-e02-lock",
+    "git_metadata_present": false,
+    "ignored_data_present": false,
+    "ignored_runs_present": false,
+    "project_venv_present": false
+  },
+  "verification": {
+    "unittest_count": 150,
+    "unittest_skipped": 0,
+    "unittest_result": "150 passed with host loopback permission, zero skipped; includes hard exits before initial metrics publication, after synced orphan metrics, after synced latest checkpoint, and before replacing a later-epoch metrics log",
+    "compileall": "passed",
+    "loopback_denied_by_default_sandbox": true
+  },
+  "limitations": [
+    "snapshot came from the current uncommitted working tree rather than a committed clean revision",
+    "clean OS image provisioning and CUDA/GPU behavior remain unverified",
+    "PyTorch emitted an optional NumPy initialization warning; tests passed without NumPy"
+  ],
+  "followup_regression": {
+    "tests": [
+      "PilotWorkflowTests.test_atomic_publication_replace_failure_preserves_previous_outputs",
+      "PilotWorkflowTests.test_atomic_publication_fsync_failures_have_recoverable_states",
+      "PilotWorkflowTests.test_hard_process_exit_after_fsynced_metrics_or_latest_recovers",
+      "PilotWorkflowTests.test_hard_process_exit_after_fsynced_metrics_or_latest_recovers: covers four process-exit points and orphan-temp cleanup",
+      "Run split_manifest.json now uses the tested experiment-level atomic/fsync JSON writer; standalone data.py identity matches the v4.33 amendment"
+    ],
+    "project_environment": "all passed; full 150-test suite passed after run-manifest writer correction",
+    "pinned_lock_source_only_environment": "all passed; full 150-test suite passed after run-manifest writer correction",
+    "copied_changed_files": [
+      "tide_jepa/experiment.py",
+      "tide_jepa/data.py",
+      "tests/test_data.py"
+    ]
+  }
+}

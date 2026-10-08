@@ -252,6 +252,5 @@ class DataContractTests(unittest.TestCase):
             self.assertEqual(loaded, manifest.to_dict())
             self.assertFalse(list(path.parent.glob("*.tmp")))
 
-
 if __name__ == "__main__":
     unittest.main()

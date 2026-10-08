@@ -1,0 +1,44 @@
+{
+  "all_requests_passed": true,
+  "date": "2026-10-08",
+  "diagnostic_only_responses": 240,
+  "http_status_counts": {
+    "200": 240
+  },
+  "human_validated": false,
+  "latency_ms": {
+    "max": 113.467,
+    "mean": 98.55,
+    "p50": 97.536,
+    "p95": 106.92,
+    "p99": 110.258
+  },
+  "listener_identity_verified": true,
+  "nonempty_outputs": 240,
+  "phomt_used": false,
+  "request_count": 240,
+  "request_source": "page-default; text omitted from report",
+  "schema_version": "v433-demo-runtime-benchmark-v1",
+  "server_pid_found": true,
+  "server_rss_first_kib": 85520,
+  "server_rss_kib_samples": [
+    85520,
+    85520,
+    85520,
+    85520,
+    85520,
+    85520,
+    85520,
+    85520,
+    85520,
+    85520,
+    85520,
+    85520,
+    85520,
+    85520
+  ],
+  "server_rss_last_kib": 85520,
+  "service": "loopback v4.33 diagnostic demo",
+  "source_or_generated_text_recorded": false,
+  "valid_utf8_responses": 240
+}

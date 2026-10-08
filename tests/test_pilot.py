@@ -60,6 +60,45 @@ class SourceSelectionTests(unittest.TestCase):
 
 
 class SeedAuthoringTests(unittest.TestCase):
+    def test_v433_release_amendment_binds_current_checker_and_reassessment(self):
+        from tide_jepa.experiment import _implementation_identity, _runtime_identity
+        from tide_jepa.pilot import _load_v433_checker_reassessment
+
+        with tempfile.TemporaryDirectory() as temporary:
+            base = Path(temporary)
+            (base / "data_statement.json").write_text(json.dumps({"version": "vi-en-ai-v4.33"}))
+            protocol = {"runtime": _runtime_identity(), "implementation_sha256": {"old": "frozen"},
+                        "quality_thresholds": {"valid_unicode_rate": 1.0}}
+            protocol_path = base / "protocol.json"
+            protocol_path.write_text(json.dumps(protocol))
+            pilot_file = Path(__import__("tide_jepa.pilot", fromlist=["__file__"]).__file__)
+            report = {"schema_version": "v433-semantic-checker-reassessment-v1",
+                      "pilot_version": "vi-en-ai-v4.33", "release_holdout_opened": False,
+                      "human_validated": False, "phomt_used": False,
+                      "corrected_checker_sha256": hashlib.sha256(pilot_file.read_bytes()).hexdigest(),
+                      "runs": [{"run": "seed17.json", "primary": True, "gate": "pass"}]}
+            report_path = base / "reassessment.json"
+            report_path.write_text(json.dumps(report))
+            current = _implementation_identity()
+            amendment = {
+                "schema_version": "v433-release-test-amendment-v1",
+                "protocol_sha256": hashlib.sha256(protocol_path.read_bytes()).hexdigest(),
+                "frozen_implementation_sha256": protocol["implementation_sha256"],
+                "amended_evaluator_sha256": {key: value for key, value in current.items()
+                                             if key in {"pilot.py", "infer.py", "data.py"}},
+                "runtime": protocol["runtime"], "quality_thresholds": protocol["quality_thresholds"],
+                "validation_reassessment": "reassessment.json",
+                "validation_reassessment_sha256": hashlib.sha256(report_path.read_bytes()).hexdigest(),
+                "primary_configs": ["seed17.json"],
+            }
+            (base / "release_test_amendment.json").write_text(json.dumps(amendment))
+            self.assertEqual(_load_v433_checker_reassessment(base, protocol)["entries"]["seed17.json"]["gate"],
+                             "pass")
+            report["release_holdout_opened"] = True
+            report_path.write_text(json.dumps(report))
+            with self.assertRaisesRegex(ValueError, "checker amendment identity"):
+                _load_v433_checker_reassessment(base, protocol)
+
     def test_registered_primary_matrix_includes_decoder_and_rejects_duplicates(self):
         from tide_jepa.pilot import _registered_primary_configs
         protocol = {"primary_quality_mode": "tide", "seeds": [17, 23],
@@ -1651,6 +1690,144 @@ class PilotWorkflowTests(unittest.TestCase):
         self.assertEqual(len(configs), 6)
         self.assertEqual({config["model"]["source_pointer_decoder"] for config in configs}, {False, True})
 
+    def test_v431_generates_fresh_scoped_bundle_and_freezes_tide_token_only_control(self):
+        from tide_jepa.pilot import REVIEWED_ARTIFACTS, freeze_pilot
+        from tide_jepa.pilot_seed import FAMILIES_V431
+
+        self.assertEqual([len(FAMILIES_V431[split]) for split in ("train", "validation", "test")],
+                         [112, 40, 40])
+        self.assertEqual({int(row[0].removeprefix("compose431_").split("_")[0])
+                          for split in FAMILIES_V431.values() for row in split}, {74, 75, 76})
+        self.base = Path(self.temporary.name) / "v4.31"
+        self.statement = author_seed_v4(self.base, version="v4.31")
+        self.assertEqual(self.statement["reviewed_records"], 12160)
+        self.assertIn("TIDE versus token-only", self.statement["split_policy"])
+        self.assertIn("jepa_objective_vs_token_only", self.statement["registered_hypotheses"])
+        frames = json.loads((self.base / "semantic_frames.draft.json").read_text())
+        self.assertTrue(all("predicate_vi_present" in frame for frame in frames.values()))
+        bundle = self.base / "review_bundle"
+        bundle_manifest = json.loads((bundle / "manifest.json").read_text())
+        self.assertEqual(bundle_manifest["review_scope"], "train-validation-only")
+        self.assertNotIn("test", json.loads((bundle / "groups.json").read_text()).values())
+        bundle_sha = hashlib.sha256((bundle / "manifest.json").read_bytes()).hexdigest()
+        hashes = {name: hashlib.sha256((self.base / name).read_bytes()).hexdigest()
+                  for name in REVIEWED_ARTIFACTS}
+        for label in ("a", "b"):
+            (self.base / f"review-{label}.json").write_text(json.dumps({
+                "reviewer_id": f"synthetic-test-reviewer-{label}", "reviewer_type": "AI",
+                "decision": "approve", "draft_sha256": self.statement["draft_sha256"],
+                "rows_checked": 12160, "artifact_sha256": hashes,
+                "review_bundle_sha256": bundle_sha,
+            }), encoding="utf-8")
+        (self.base / "adjudication.json").write_text(json.dumps({
+            "decision": "approve", "draft_sha256": self.statement["draft_sha256"],
+            "human_validated": False,
+        }), encoding="utf-8")
+        freeze_pilot(self.base, epochs=1, seeds=(17, 23, 41), model_width=64,
+                     model_heads=4, model_layers=2, primary_mode="tide",
+                     condition_modes=("tide", "token_only"),
+                     condition_source_copy_weights=(0.0,),
+                     checkpoint_selection_policy="fixed_final_epoch")
+        protocol = json.loads((self.base / "protocol.json").read_text())
+        self.assertEqual(protocol["primary_quality_mode"], "tide")
+        self.assertEqual(len(protocol["configs"]), 6)
+        self.assertEqual(protocol["review_scope"], "train-validation-only")
+
+    def test_v432_registers_fresh_pointer_primary_and_vocabulary_control(self):
+        from tide_jepa.pilot import REVIEWED_ARTIFACTS, freeze_pilot
+        from tide_jepa.pilot_seed import FAMILIES_V432
+
+        self.assertEqual([len(FAMILIES_V432[split]) for split in ("train", "validation", "test")],
+                         [112, 40, 40])
+        self.assertEqual({int(row[0].removeprefix("compose432_").split("_")[0])
+                          for split in FAMILIES_V432.values() for row in split}, {77, 78, 79})
+        self.base = Path(self.temporary.name) / "v4.32"
+        self.statement = author_seed_v4(self.base, version="v4.32")
+        self.assertEqual(self.statement["reviewed_records"], 12160)
+        self.assertIn("source-pointer", self.statement["split_policy"])
+        self.assertIn("source_pointer_preservation", self.statement["registered_hypotheses"])
+        self.assertEqual(self.statement["quality_thresholds"]["single_action_preservation_rate"], 0.9)
+        self.assertEqual(self.statement["quality_thresholds"]["held_out_path_preservation_rate"], 0.8)
+        self.assertIn("do not refer to the sealed release-holdout split",
+                      self.statement["quality_gate_scope_note"])
+        bundle = self.base / "review_bundle"
+        bundle_statement = json.loads((bundle / "statement.json").read_text())
+        self.assertEqual(self.statement["reviewed_records_sha256"],
+                         bundle_statement["reviewed_records_sha256"])
+        bundle_manifest = json.loads((bundle / "manifest.json").read_text())
+        bundle_sha = hashlib.sha256((bundle / "manifest.json").read_bytes()).hexdigest()
+        hashes = bundle_manifest["files_sha256"]
+        for label in ("a", "b"):
+            (self.base / f"review-{label}.json").write_text(json.dumps({
+                "reviewer_id": f"synthetic-test-reviewer-{label}", "reviewer_type": "AI",
+                "decision": "approve", "draft_sha256": self.statement["draft_sha256"],
+                "rows_checked": 12160, "artifact_sha256": hashes,
+                "review_bundle_sha256": bundle_sha,
+            }), encoding="utf-8")
+        (self.base / "adjudication.json").write_text(json.dumps({
+            "decision": "approve", "draft_sha256": self.statement["draft_sha256"],
+            "human_validated": False,
+        }), encoding="utf-8")
+        freeze_pilot(self.base, epochs=1, seeds=(17, 23, 41), model_width=64,
+                     model_heads=4, model_layers=2, primary_mode="tide",
+                     condition_modes=("tide",), condition_source_copy_weights=(0.0,),
+                     condition_source_pointer_decoder_modes=("vocabulary", "source_pointer"),
+                     primary_source_pointer_decoder_modes=("source_pointer",),
+                     checkpoint_selection_policy="fixed_final_epoch")
+        protocol = json.loads((self.base / "protocol.json").read_text())
+        configs = [json.loads((self.base / name).read_text()) for name in protocol["configs"]]
+        self.assertEqual(len(configs), 6)
+        self.assertEqual(protocol["primary_source_pointer_decoder_modes"], ["source_pointer"])
+        self.assertEqual({config["model"]["source_pointer_decoder"] for config in configs}, {False, True})
+        self.assertEqual(protocol["review_scope"], "train-validation-only")
+
+    def test_v433_registers_fresh_58_epoch_tide_token_only_confirmation(self):
+        from tide_jepa.pilot import _semantic_frame_flags, freeze_pilot
+        from tide_jepa.pilot_seed import FAMILIES_V433
+
+        self.assertEqual([len(FAMILIES_V433[split]) for split in ("train", "validation", "test")],
+                         [112, 40, 40])
+        self.assertEqual({int(row[0].removeprefix("compose433_").split("_")[0])
+                          for split in FAMILIES_V433.values() for row in split}, {80, 81, 82})
+        self.base = Path(self.temporary.name) / "v4.33"
+        self.statement = author_seed_v4(self.base, version="v4.33")
+        frames = json.loads((self.base / "semantic_frames.draft.json").read_text())
+        sample_frame = next(frame for frame in frames.values()
+                            if frame.get("event", "").startswith("compose433_"))
+        self.assertIsNotNone(_semantic_frame_flags("", "en", sample_frame))
+        self.assertIsNotNone(_semantic_frame_flags("", "vi", sample_frame))
+        self.assertEqual(self.statement["reviewed_records"], 12160)
+        self.assertIn("58-epoch TIDE versus token-only", self.statement["split_policy"])
+        self.assertIn("extended_optimization", self.statement["registered_hypotheses"])
+        self.assertIn("tide_vs_token_only", self.statement["registered_hypotheses"])
+        self.assertEqual(self.statement["quality_thresholds"]["single_action_preservation_rate"], 0.9)
+        bundle = self.base / "review_bundle"
+        bundle_manifest = json.loads((bundle / "manifest.json").read_text())
+        bundle_sha = hashlib.sha256((bundle / "manifest.json").read_bytes()).hexdigest()
+        hashes = bundle_manifest["files_sha256"]
+        for label in ("a", "b"):
+            (self.base / f"review-{label}.json").write_text(json.dumps({
+                "reviewer_id": f"synthetic-test-reviewer-{label}", "reviewer_type": "AI",
+                "decision": "approve", "draft_sha256": self.statement["draft_sha256"],
+                "rows_checked": self.statement["reviewed_records"], "artifact_sha256": hashes,
+                "review_bundle_sha256": bundle_sha,
+            }), encoding="utf-8")
+        (self.base / "adjudication.json").write_text(json.dumps({
+            "decision": "approve", "draft_sha256": self.statement["draft_sha256"],
+            "human_validated": False,
+        }), encoding="utf-8")
+        freeze_pilot(self.base, epochs=58, seeds=(17, 23, 41), model_width=64,
+                     model_heads=4, model_layers=2, primary_mode="tide",
+                     condition_modes=("tide", "token_only"), condition_source_copy_weights=(0.0,),
+                     checkpoint_selection_policy="fixed_final_epoch")
+        protocol = json.loads((self.base / "protocol.json").read_text())
+        configs = [json.loads((self.base / name).read_text()) for name in protocol["configs"]]
+        self.assertEqual(len(configs), 6)
+        self.assertEqual(protocol["primary_quality_mode"], "tide")
+        self.assertEqual(protocol["review_scope"], "train-validation-only")
+        self.assertTrue(all(config["training"]["epochs"] == 58 for config in configs))
+        self.assertEqual({config["objective"]["mode"] for config in configs}, {"tide", "token_only"})
+
     def test_self_feeding_training_smoke_writes_identified_checkpoint(self):
         from tide_jepa.experiment import run_experiment
         self.freeze()
@@ -2153,6 +2330,308 @@ class PilotWorkflowTests(unittest.TestCase):
         self.assertTrue((output / "best.pt").is_file())
         self.assertFalse((output / "test_metrics.json").exists())
         self.assertFalse((output / "generation_metrics.json").exists())
+
+    def test_hard_process_exit_after_fsynced_metrics_or_latest_recovers(self):
+        import os
+        import subprocess
+        import sys
+        self.write_reviews()
+        self.freeze()
+        template_path = self.base / "token_only-seed-17.json"
+        protocol_path = self.base / "protocol.json"
+        child_code = r"""
+import os
+import sys
+from pathlib import Path
+import tide_jepa.experiment as experiment
+
+output = Path(sys.argv[1])
+crash_point = sys.argv[2]
+sync_directory = experiment._fsync_directory
+replace_file = experiment.os.replace
+
+def replace_then_exit(source, destination):
+    if (crash_point == "before_initial_metrics_replace"
+            and Path(destination).name == "metrics.csv"
+            and not (output / "latest.pt").exists()
+            and not Path(destination).exists()):
+        os._exit(86)
+    if (crash_point == "before_metrics_replace"
+            and Path(destination).name == "metrics.csv"
+            and (output / "latest.pt").exists()):
+        os._exit(86)
+    return replace_file(source, destination)
+
+experiment.os.replace = replace_then_exit
+
+def sync_then_exit(directory):
+    sync_directory(directory)
+    if Path(directory) != output:
+        return
+    latest = output / "latest.pt"
+    best = output / "best.pt"
+    metrics = output / "metrics.csv"
+    if crash_point == "after_metrics" and metrics.is_file() and not latest.exists():
+        if metrics.read_bytes().count(b"\n") > 1:
+            os._exit(86)
+    if crash_point == "after_latest" and latest.is_file() and not best.exists():
+        os._exit(86)
+
+experiment._fsync_directory = sync_then_exit
+experiment.run_experiment(sys.argv[3], device="cpu")
+"""
+        for crash_point in (
+            "before_initial_metrics_replace", "after_metrics", "after_latest", "before_metrics_replace"
+        ):
+            with self.subTest(crash_point=crash_point), tempfile.TemporaryDirectory() as temporary:
+                output = Path(temporary) / "run"
+                config_path = self.base / f"hard-crash-{crash_point}.json"
+                config = json.loads(template_path.read_text(encoding="utf-8"))
+                config["output_dir"] = str(output)
+                if crash_point == "before_metrics_replace":
+                    config["training"]["epochs"] = 2
+                config_path.write_text(json.dumps(config), encoding="utf-8")
+                protocol = json.loads(protocol_path.read_text(encoding="utf-8"))
+                protocol["config_files_sha256"][config_path.name] = hashlib.sha256(
+                    config_path.read_bytes()
+                ).hexdigest()
+                protocol_path.write_text(json.dumps(protocol), encoding="utf-8")
+
+                child = subprocess.run(
+                    [sys.executable, "-B", "-c", child_code, str(output), crash_point, str(config_path)],
+                    cwd=Path(__file__).resolve().parents[1],
+                    env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"},
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                    timeout=120,
+                )
+                self.assertEqual(child.returncode, 86, child.stderr)
+                if crash_point == "before_initial_metrics_replace":
+                    self.assertFalse((output / "metrics.csv").exists())
+                    self.assertFalse((output / "latest.pt").exists())
+                    self.assertEqual(len(list(output.glob(".metrics.csv.*"))), 1)
+                else:
+                    self.assertTrue((output / "metrics.csv").is_file())
+                if crash_point == "before_initial_metrics_replace":
+                    pass
+                elif crash_point == "after_metrics":
+                    self.assertFalse((output / "latest.pt").exists())
+                elif crash_point == "after_latest":
+                    self.assertTrue((output / "latest.pt").is_file())
+                    self.assertFalse((output / "best.pt").exists())
+                else:
+                    import csv
+                    import torch
+                    self.assertEqual(torch.load(output / "latest.pt", weights_only=True)["epoch"], 1)
+                    with (output / "metrics.csv").open("r", encoding="utf-8", newline="") as stream:
+                        epochs = {int(row["epoch"]) for row in csv.DictReader(stream)}
+                    self.assertEqual(epochs, {1})
+                    self.assertEqual(len(list(output.glob(".metrics.csv.*"))), 1)
+
+                from tide_jepa.experiment import run_experiment
+                with redirect_stdout(io.StringIO()):
+                    result = run_experiment(config_path, resume=True, device="cpu")
+                self.assertEqual(result["last_epoch"], config["training"]["epochs"])
+                self.assertTrue((output / "latest.pt").is_file())
+                self.assertTrue((output / "best.pt").is_file())
+                self.assertFalse((output / "test_metrics.json").exists())
+                self.assertFalse((output / "generation_metrics.json").exists())
+                if crash_point == "after_metrics":
+                    self.assertEqual(len(list(output.glob("metrics.uncheckpointed-*.csv"))), 1)
+                self.assertFalse(list(output.glob(".metrics.csv.*")))
+                self.assertFalse(list(output.glob(".latest.pt.*")))
+
+    def test_uncheckpointed_first_epoch_metrics_are_preserved_and_restarted(self):
+        import csv
+        from unittest.mock import patch
+        import tide_jepa.experiment as experiment
+        self.write_reviews()
+        self.freeze()
+        path = self.base / "token_only-seed-17.json"
+        config = json.loads(path.read_text())
+        output = self.base / "crash-before-first-checkpoint"
+        config["output_dir"] = str(output)
+        path.write_text(json.dumps(config))
+        protocol_path = self.base / "protocol.json"
+        protocol = json.loads(protocol_path.read_text())
+        protocol["config_files_sha256"][path.name] = hashlib.sha256(path.read_bytes()).hexdigest()
+        protocol_path.write_text(json.dumps(protocol))
+        append = experiment._append_metrics_rows
+        def crash_after_metrics(destination, rows):
+            append(destination, rows)
+            raise RuntimeError("synthetic crash after epoch metrics")
+        with patch.object(experiment, "_append_metrics_rows", side_effect=crash_after_metrics), \
+                redirect_stdout(io.StringIO()):
+            with self.assertRaisesRegex(RuntimeError, "after epoch metrics"):
+                experiment.run_experiment(path, device="cpu")
+        self.assertTrue((output / "metrics.csv").is_file())
+        self.assertFalse((output / "latest.pt").exists())
+        with redirect_stdout(io.StringIO()):
+            result = experiment.run_experiment(path, resume=True, device="cpu")
+        archives = list(output.glob("metrics.uncheckpointed-*.csv"))
+        self.assertEqual(len(archives), 1)
+        self.assertEqual(result["last_epoch"], config["training"]["epochs"])
+        self.assertTrue((output / "latest.pt").is_file())
+        self.assertTrue((output / "best.pt").is_file())
+        with (output / "metrics.csv").open("r", encoding="utf-8", newline="") as stream:
+            rows = list(csv.DictReader(stream))
+        epochs = sorted({int(row["epoch"]) for row in rows})
+        self.assertEqual(epochs, list(range(1, config["training"]["epochs"] + 1)))
+
+    def test_orphan_metrics_after_published_checkpoint_are_reconciled_on_resume(self):
+        import csv
+        from unittest.mock import patch
+        import torch
+        import tide_jepa.experiment as experiment
+        self.write_reviews()
+        self.freeze()
+        path = self.base / "token_only-seed-17.json"
+        config = json.loads(path.read_text())
+        config["training"]["epochs"] = 3
+        output = self.base / "crash-after-first-checkpoint"
+        config["output_dir"] = str(output)
+        path.write_text(json.dumps(config))
+        protocol_path = self.base / "protocol.json"
+        protocol = json.loads(protocol_path.read_text())
+        protocol["config_files_sha256"][path.name] = hashlib.sha256(path.read_bytes()).hexdigest()
+        protocol_path.write_text(json.dumps(protocol))
+        append = experiment._append_metrics_rows
+        calls = 0
+
+        def crash_after_second_epoch_metrics(destination, rows):
+            nonlocal calls
+            append(destination, rows)
+            calls += 1
+            if calls == 2:
+                raise RuntimeError("synthetic crash after later epoch metrics")
+
+        with patch.object(experiment, "_append_metrics_rows", side_effect=crash_after_second_epoch_metrics), \
+                redirect_stdout(io.StringIO()):
+            with self.assertRaisesRegex(RuntimeError, "later epoch metrics"):
+                experiment.run_experiment(path, device="cpu")
+        latest = torch.load(output / "latest.pt", weights_only=True)
+        self.assertEqual(latest["epoch"], 1)
+        with (output / "metrics.csv").open("r", encoding="utf-8", newline="") as stream:
+            interrupted_rows = list(csv.DictReader(stream))
+        self.assertEqual(sorted({int(row["epoch"]) for row in interrupted_rows}), [1, 2])
+
+        with redirect_stdout(io.StringIO()):
+            result = experiment.run_experiment(path, resume=True, device="cpu")
+        self.assertEqual(result["last_epoch"], config["training"]["epochs"])
+        latest = torch.load(output / "latest.pt", weights_only=True)
+        self.assertEqual(latest["epoch"], config["training"]["epochs"])
+        with (output / "metrics.csv").open("r", encoding="utf-8", newline="") as stream:
+            rows = list(csv.DictReader(stream))
+        counts = {}
+        for row in rows:
+            counts.setdefault(int(row["epoch"]), {})[row["split"]] = counts.get(int(row["epoch"]), {}).get(row["split"], 0) + 1
+        self.assertEqual(
+            counts,
+            {epoch: {"train": 1, "validation": 1}
+             for epoch in range(1, config["training"]["epochs"] + 1)},
+        )
+
+    def test_atomic_publication_replace_failure_preserves_previous_outputs(self):
+        from unittest.mock import patch
+        import torch
+        import tide_jepa.experiment as experiment
+
+        with tempfile.TemporaryDirectory() as temporary:
+            base = Path(temporary)
+            cases = (
+                ("json", base / "manifest.json", b'{"old": true}\n',
+                 lambda path: experiment._atomic_json(path, {"new": True})),
+                ("csv", base / "metrics.csv", b"epoch,split\n1,train\n",
+                 lambda path: experiment._write_csv_atomic(path, ("epoch", "split"), [(2, "train")])),
+                ("checkpoint", base / "latest.pt", b"previous checkpoint",
+                 lambda path: experiment._save_checkpoint(path, {"epoch": 2, "weights": torch.tensor([1.0])})),
+            )
+            for label, destination, previous, publish in cases:
+                with self.subTest(kind=label):
+                    destination.write_bytes(previous)
+                    with patch.object(experiment.os, "replace", side_effect=OSError("injected replace failure")):
+                        with self.assertRaisesRegex(OSError, "injected replace failure"):
+                            publish(destination)
+                    self.assertEqual(destination.read_bytes(), previous)
+                    self.assertFalse(list(base.glob(f".{destination.name}.*")))
+
+    def test_atomic_publication_fsync_failures_have_recoverable_states(self):
+        from unittest.mock import patch
+        import torch
+        import tide_jepa.experiment as experiment
+
+        with tempfile.TemporaryDirectory() as temporary:
+            base = Path(temporary)
+            cases = (
+                ("json", base / "manifest.json", b'{"old": true}\n',
+                 lambda path: experiment._atomic_json(path, {"new": True})),
+                ("csv", base / "metrics.csv", b"epoch,split\n1,train\n",
+                 lambda path: experiment._write_csv_atomic(path, ("epoch", "split"), [(2, "train")])),
+                ("checkpoint", base / "latest.pt", b"previous checkpoint",
+                 lambda path: experiment._save_checkpoint(path, {"epoch": 2, "weights": torch.tensor([1.0])})),
+            )
+            for label, destination, previous, publish in cases:
+                for failed_sync, old_destination_survives in ((1, True), (2, False)):
+                    with self.subTest(kind=label, failed_sync=failed_sync):
+                        destination.write_bytes(previous)
+                        sync_calls = 0
+
+                        def fail_selected_sync(_descriptor):
+                            nonlocal sync_calls
+                            sync_calls += 1
+                            if sync_calls == failed_sync:
+                                raise OSError("injected fsync failure")
+
+                        with patch.object(experiment.os, "fsync", side_effect=fail_selected_sync):
+                            with self.assertRaisesRegex(OSError, "injected fsync failure"):
+                                publish(destination)
+                        self.assertEqual(sync_calls, failed_sync)
+                        if old_destination_survives:
+                            self.assertEqual(destination.read_bytes(), previous)
+                        else:
+                            self.assertNotEqual(destination.read_bytes(), previous)
+                        self.assertFalse(list(base.glob(f".{destination.name}.*")))
+
+    def test_run_experiment_excludes_concurrent_writer_and_releases_lock(self):
+        import subprocess
+        import sys
+        from unittest.mock import patch
+        import tide_jepa.experiment as experiment
+        with tempfile.TemporaryDirectory() as temporary:
+            base = Path(temporary)
+            config_path = base / "run.json"
+            config_path.write_text(json.dumps({"output_dir": "run-output"}))
+            output_dir = base / "run-output"
+            with patch.object(experiment, "_run_experiment_unlocked", return_value={"started": True}) as runner:
+                with experiment._output_directory_lock(output_dir):
+                    with self.assertRaisesRegex(RuntimeError, "another training process"):
+                        experiment.run_experiment(config_path, device="cpu")
+                    runner.assert_not_called()
+                    child_script = (
+                        "import sys\n"
+                        "from pathlib import Path\n"
+                        "from tide_jepa.experiment import _output_directory_lock\n"
+                        "try:\n"
+                        "    with _output_directory_lock(Path(sys.argv[1])):\n"
+                        "        pass\n"
+                        "except RuntimeError:\n"
+                        "    raise SystemExit(23)\n"
+                    )
+                    child = subprocess.run(
+                        [sys.executable, "-c", child_script, str(output_dir)],
+                        cwd=Path(__file__).resolve().parents[1],
+                        capture_output=True, text=True, check=False, timeout=30,
+                    )
+                    self.assertEqual(child.returncode, 23, child.stderr)
+                self.assertEqual(experiment.run_experiment(config_path, device="cpu"), {"started": True})
+                runner.assert_called_once()
+
+            with patch.object(experiment, "_run_experiment_unlocked", side_effect=ValueError("test failure")):
+                with self.assertRaisesRegex(ValueError, "test failure"):
+                    experiment.run_experiment(config_path, device="cpu")
+            with experiment._output_directory_lock(output_dir):
+                pass
 
     def test_group_batch_preflight_rejects_large_indivisible_group(self):
         from types import SimpleNamespace

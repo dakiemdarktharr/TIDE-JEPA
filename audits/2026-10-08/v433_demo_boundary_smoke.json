@@ -1,0 +1,129 @@
+{
+  "case_count": 19,
+  "cases": [
+    {
+      "actual_status": 200,
+      "case": "default-train-allowlist",
+      "expected_status": 200,
+      "passed": true
+    },
+    {
+      "actual_status": 400,
+      "case": "trailing-whitespace-source",
+      "expected_status": 400,
+      "passed": true
+    },
+    {
+      "actual_status": 400,
+      "case": "case-or-punctuation-variant",
+      "expected_status": 400,
+      "passed": true
+    },
+    {
+      "actual_status": 400,
+      "case": "unicode-decomposed-source",
+      "expected_status": 400,
+      "passed": true
+    },
+    {
+      "actual_status": 400,
+      "case": "prompt-injection-suffix",
+      "expected_status": 400,
+      "passed": true
+    },
+    {
+      "actual_status": 400,
+      "case": "plausible-out-of-corpus-source",
+      "expected_status": 400,
+      "passed": true
+    },
+    {
+      "actual_status": 400,
+      "case": "empty-source",
+      "expected_status": 400,
+      "passed": true
+    },
+    {
+      "actual_status": 400,
+      "case": "cross-language-request",
+      "expected_status": 400,
+      "passed": true
+    },
+    {
+      "actual_status": 400,
+      "case": "unregistered-action",
+      "expected_status": 400,
+      "passed": true
+    },
+    {
+      "actual_status": 400,
+      "case": "boolean-token-budget",
+      "expected_status": 400,
+      "passed": true
+    },
+    {
+      "actual_status": 400,
+      "case": "zero-token-budget",
+      "expected_status": 400,
+      "passed": true
+    },
+    {
+      "actual_status": 400,
+      "case": "oversized-token-budget",
+      "expected_status": 400,
+      "passed": true
+    },
+    {
+      "actual_status": 400,
+      "case": "too-many-actions",
+      "expected_status": 400,
+      "passed": true
+    },
+    {
+      "actual_status": 403,
+      "case": "invalid-origin",
+      "expected_status": 403,
+      "passed": true
+    },
+    {
+      "actual_status": 403,
+      "case": "invalid-host",
+      "expected_status": 403,
+      "passed": true
+    },
+    {
+      "actual_status": 415,
+      "case": "wrong-content-type",
+      "expected_status": 415,
+      "passed": true
+    },
+    {
+      "actual_status": 400,
+      "case": "malformed-json",
+      "expected_status": 400,
+      "passed": true
+    },
+    {
+      "actual_status": 400,
+      "case": "oversized-body",
+      "expected_status": 400,
+      "passed": true
+    },
+    {
+      "actual_status": 404,
+      "case": "unknown-route",
+      "expected_status": 404,
+      "passed": true
+    }
+  ],
+  "failed": 0,
+  "health": "operational; diagnostic_only",
+  "human_validated": false,
+  "interpretation": "Exact train source/action allowlist and HTTP request-boundary smoke; not broad semantic OOD detection.",
+  "listener_identity_verified": true,
+  "passed": 19,
+  "phomt_used": false,
+  "schema_version": "v433-demo-boundary-smoke-v1",
+  "service": "loopback v4.33 diagnostic demo",
+  "source_or_generated_text_recorded": false
+}

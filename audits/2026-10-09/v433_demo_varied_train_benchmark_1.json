@@ -1,0 +1,55 @@
+{
+  "all_requests_passed": true,
+  "batch_elapsed_seconds": 3.776,
+  "bounded_concurrency_behavior": true,
+  "concurrent_clients": 1,
+  "date": "2026-10-09",
+  "diagnostic_only_responses": 40,
+  "expected_overload_refusals": 0,
+  "http_status_counts": {
+    "200": 40
+  },
+  "human_validated": false,
+  "latency_ms": {
+    "max": 112.443,
+    "mean": 94.251,
+    "p50": 95.773,
+    "p95": 110.436,
+    "p99": 112.443
+  },
+  "listener_identity_verified": true,
+  "nonempty_outputs": 40,
+  "overload_refusal_schema_valid": 0,
+  "phomt_used": false,
+  "request_count": 40,
+  "request_source": "page-default; text omitted from report",
+  "request_variation": {
+    "action_step_counts": {
+      "1": 32,
+      "2": 32
+    },
+    "request_body_bytes_max": 252,
+    "request_body_bytes_min": 186,
+    "source": "approved v4.33 train split",
+    "source_languages": {
+      "en": 32,
+      "vi": 32
+    },
+    "text_recorded": false,
+    "unique_candidates": 64
+  },
+  "schema_version": "v433-demo-runtime-benchmark-v1",
+  "server_pid_found": true,
+  "server_rss_first_kib": 88480,
+  "server_rss_kib_samples": [
+    88480,
+    88796,
+    88912,
+    88912
+  ],
+  "server_rss_last_kib": 88912,
+  "service": "loopback v4.33 diagnostic demo",
+  "source_or_generated_text_recorded": false,
+  "throughput_requests_per_second": 10.595,
+  "valid_utf8_responses": 40
+}

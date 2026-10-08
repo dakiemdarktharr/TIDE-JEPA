@@ -1,0 +1,23 @@
+{
+  "schema_version": "v433-live-loopback-soak-v1",
+  "timestamp_utc": "2026-10-08T16:04:05Z",
+  "target_duration_seconds": 300.0,
+  "actual_duration_seconds": 300.07,
+  "request_scope": "one exact approved train-only Vietnamese TIME:PAST request",
+  "requests": 3219,
+  "http_status_counts": {
+    "200": 3219
+  },
+  "transport_or_parse_errors": {},
+  "valid_utf8_200_responses": 3219,
+  "latency_ms_p50": 92.7,
+  "latency_ms_p95": 103.5,
+  "latency_ms_p99": 108.7,
+  "latency_ms_max": 143.8,
+  "health_checks": 30,
+  "diagnostic_only_health_checks": 30,
+  "quality_status": "diagnostic_only",
+  "human_validated": false,
+  "phomt_trained": false,
+  "source_or_generated_text_recorded": false
+}
